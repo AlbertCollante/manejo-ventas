@@ -6,7 +6,7 @@ import { Label } from "./ui/label";
 import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import { Alert, AlertDescription } from "./ui/alert";
 
-const logoUrl = new URL("./figma/logo.png", import.meta.url).href;
+const logoUrl = new URL("./figma/logo1.png", import.meta.url).href;
 
 interface LoginScreenProps {
   onLogin: (user: { username: string; role: string; name: string }) => void;

@@ -187,7 +187,16 @@ export default function App() {
             <p className="text-sm text-muted-foreground">Sistema de Gestión de Farmacia</p>
           </div>
           <div className="text-sm text-muted-foreground">
-            Lunes, 13 de Octubre 2025
+            {(() => {
+              const fecha = new Date().toLocaleDateString("es-ES", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              });
+
+              return fecha.charAt(0).toUpperCase() + fecha.slice(1);
+            })()}
           </div>
         </header>
 

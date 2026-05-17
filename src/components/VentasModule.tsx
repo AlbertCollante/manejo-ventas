@@ -577,7 +577,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
 
     doc.setFontSize(small);
     doc.setFont('helvetica', 'normal');
-    doc.text('CUSCO - CUSCO', center, y, { align: 'center' });
+    doc.text('Sede San Isidro - Cusco', center, y, { align: 'center' });
     y += 5;
 
     line();
@@ -592,7 +592,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     y += 4;
 
     const numeroVenta = String(normalized.id).replace('V-', '').replace('B002-', '');
-    doc.text(`B002-${numeroVenta}`, center, y, { align: 'center' });
+    doc.text(`F00-${numeroVenta}`, center, y, { align: 'center' });
     y += 4;
 
     doc.setFont('helvetica', 'normal');
