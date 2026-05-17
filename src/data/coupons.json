@@ -1,0 +1,26 @@
+[
+  {
+    "code": "DESC10",
+    "discount": 10,
+    "type": "percentage",
+    "description": "10% de descuento",
+    "minAmount": 50,
+    "maxDiscount": 100
+  },
+  {
+    "code": "PRIMERAVEZ",
+    "discount": 15,
+    "type": "percentage",
+    "description": "15% para nuevos clientes",
+    "minAmount": 100,
+    "maxDiscount": 200
+  },
+  {
+    "code": "VERANO2025",
+    "discount": 20,
+    "type": "fixed",
+    "description": "S/ 20 de descuento",
+    "minAmount": 80,
+    "maxDiscount": 20
+  }
+]

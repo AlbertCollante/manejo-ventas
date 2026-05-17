@@ -1,0 +1,25 @@
+[
+  {
+    "id": "V-0001",
+    "date": "15/02/2026 10:30:00",
+    "dateOnly": "2026-02-15",
+    "customer": "Juan Pérez",
+    "dni": "12345678",
+    "items": [
+      {
+        "id": 1,
+        "code": "MED001",
+        "name": "Paracetamol 500mg",
+        "price": 2.50,
+        "quantity": 2
+      }
+    ],
+    "subtotal": 5.00,
+    "discount": 0,
+    "total": 5.90,
+    "paymentAmount": 10.00,
+    "vuelto": 4.10,
+    "paymentMethod": "Efectivo",
+    "user": "caja1"
+  }
+]

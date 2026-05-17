@@ -1,0 +1,204 @@
+{
+  "ingresos": [
+    {
+      "id": 1,
+      "date": "22/02/2026",
+      "concept": "Cierre de Caja Diario",
+      "amount": 3450.75,
+      "type": "Venta"
+    },
+    {
+      "id": 2,
+      "date": "21/02/2026",
+      "concept": "Cierre de Caja Diario",
+      "amount": 2890.50,
+      "type": "Venta"
+    },
+    {
+      "id": 3,
+      "date": "20/02/2026",
+      "concept": "Cierre de Caja Diario",
+      "amount": 4120.00,
+      "type": "Venta"
+    },
+    {
+      "id": 4,
+      "date": "19/02/2026",
+      "concept": "Cierre de Caja Diario",
+      "amount": 2650.25,
+      "type": "Venta"
+    },
+    {
+      "id": 5,
+      "date": "18/02/2026",
+      "concept": "Cierre de Caja Diario",
+      "amount": 3780.00,
+      "type": "Venta"
+    },
+    {
+      "id": 6,
+      "date": "17/02/2026",
+      "concept": "Cierre de Caja Diario",
+      "amount": 3120.50,
+      "type": "Venta"
+    },
+    {
+      "id": 7,
+      "date": "16/02/2026",
+      "concept": "Cierre de Caja Diario",
+      "amount": 2945.75,
+      "type": "Venta"
+    },
+    {
+      "id": 8,
+      "date": "15/02/2026",
+      "concept": "Cierre de Caja Diario",
+      "amount": 4230.00,
+      "type": "Venta"
+    },
+    {
+      "id": 9,
+      "date": "14/02/2026",
+      "concept": "Cierre de Caja Diario",
+      "amount": 3560.25,
+      "type": "Venta"
+    },
+    {
+      "id": 10,
+      "date": "13/02/2026",
+      "concept": "Cierre de Caja Diario",
+      "amount": 2876.50,
+      "type": "Venta"
+    }
+  ],
+  "egresos": [
+    {
+      "id": 1,
+      "date": "22/02/2026",
+      "concept": "Compra de Medicamentos - Proveedor A",
+      "amount": 2000.00,
+      "type": "Compra"
+    },
+    {
+      "id": 2,
+      "date": "21/02/2026",
+      "concept": "Compra de Suplementos - Proveedor B",
+      "amount": 1500.00,
+      "type": "Compra"
+    },
+    {
+      "id": 3,
+      "date": "20/02/2026",
+      "concept": "Pago de Servicios - Luz",
+      "amount": 350.00,
+      "type": "Servicios"
+    },
+    {
+      "id": 4,
+      "date": "20/02/2026",
+      "concept": "Compra de Medicamentos - Proveedor A",
+      "amount": 2800.00,
+      "type": "Compra"
+    },
+    {
+      "id": 5,
+      "date": "19/02/2026",
+      "concept": "Pago de Nómina - Empleados",
+      "amount": 4500.00,
+      "type": "Nómina"
+    },
+    {
+      "id": 6,
+      "date": "18/02/2026",
+      "concept": "Compra de Medicamentos - Proveedor C",
+      "amount": 3200.00,
+      "type": "Compra"
+    },
+    {
+      "id": 7,
+      "date": "17/02/2026",
+      "concept": "Pago de Servicios - Internet",
+      "amount": 120.00,
+      "type": "Servicios"
+    },
+    {
+      "id": 8,
+      "date": "16/02/2026",
+      "concept": "Compra de Suplementos - Proveedor D",
+      "amount": 1800.00,
+      "type": "Compra"
+    },
+    {
+      "id": 9,
+      "date": "15/02/2026",
+      "concept": "Mantenimiento de Local",
+      "amount": 450.00,
+      "type": "Mantenimiento"
+    },
+    {
+      "id": 10,
+      "date": "14/02/2026",
+      "concept": "Compra de Medicamentos - Proveedor A",
+      "amount": 2500.00,
+      "type": "Compra"
+    },
+    {
+      "id": 11,
+      "date": "13/02/2026",
+      "concept": "Pago de Servicios - Agua",
+      "amount": 200.00,
+      "type": "Servicios"
+    },
+    {
+      "id": 12,
+      "date": "13/02/2026",
+      "concept": "Compra de Medicamentos - Proveedor B",
+      "amount": 1900.00,
+      "type": "Compra"
+    }
+  ],
+  "cierres_caja": [
+    {
+      "id": 1,
+      "fecha": "22/02/2026 18:30:45",
+      "usuario": "Carlos Rodríguez",
+      "montoInicial": 200.00,
+      "totalVentas": 776.20,
+      "montosContados": {
+        "efectivo": 193.40,
+        "yape": 89.00,
+        "tarjeta": 245.80,
+        "transferencia": 156.00
+      },
+      "totalContado": 684.20,
+      "diferencia": -92.00,
+      "observaciones": "",
+      "ventasDelDia": [
+        {
+          "id": "V-001",
+          "hora": "09:30",
+          "cliente": "Juan Pérez",
+          "total": 125.50,
+          "metodo": "Efectivo"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "fecha": "21/02/2026 18:45:20",
+      "usuario": "Ana García",
+      "montoInicial": 200.00,
+      "totalVentas": 850.00,
+      "montosContados": {
+        "efectivo": 320.00,
+        "yape": 250.00,
+        "tarjeta": 280.00,
+        "transferencia": 150.00
+      },
+      "totalContado": 1000.00,
+      "diferencia": 50.00,
+      "observaciones": "Cierre normal",
+      "ventasDelDia": []
+    }
+  ]
+}

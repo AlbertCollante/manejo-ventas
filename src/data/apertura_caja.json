@@ -1,0 +1,28 @@
+{
+  "aperturas": [
+    {
+      "id": 1,
+      "fecha": "22/02/2026 09:00:00",
+      "usuario": "Carlos Rodríguez",
+      "montoInicial": 200.00,
+      "observaciones": "Apertura normal del turno",
+      "estado": "cerrado"
+    },
+    {
+      "id": 2,
+      "fecha": "21/02/2026 09:15:00",
+      "usuario": "Ana García",
+      "montoInicial": 250.00,
+      "observaciones": "",
+      "estado": "cerrado"
+    },
+    {
+      "id": 3,
+      "fecha": "20/02/2026 08:45:00",
+      "usuario": "Carlos Rodríguez",
+      "montoInicial": 200.00,
+      "observaciones": "Cierre anterior dejó pequeña ganancia",
+      "estado": "cerrado"
+    }
+  ]
+}
