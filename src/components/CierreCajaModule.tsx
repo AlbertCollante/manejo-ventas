@@ -85,28 +85,59 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     const subtotal = Number(sale.subtotal ?? 0);
     const discount = Number(sale.descuento ?? 0);
     const total = Number(sale.total ?? 0);
-    
-    // El metodo viene como "Efectivo", "Tarjeta", "Yape", "Transferencia"
-    let paymentMethod = sale.metodo ?? 'Efectivo';
-    if (paymentMethod === 'efectivo') paymentMethod = 'Efectivo';
-    if (paymentMethod === 'tarjeta') paymentMethod = 'Tarjeta';
-    if (paymentMethod === 'yape') paymentMethod = 'Yape';
-    if (paymentMethod === 'transferencia') paymentMethod = 'Transferencia';
+
+    // Normalizar método de pago a formato capitalizado
+    let paymentMethod = String(sale.metodo ?? sale.metodoPago ?? sale.paymentMethod ?? 'Efectivo');
+    const pm = paymentMethod.toLowerCase();
+    if (pm.includes('efect')) paymentMethod = 'Efectivo';
+    else if (pm.includes('tarj')) paymentMethod = 'Tarjeta';
+    else if (pm.includes('yape')) paymentMethod = 'Yape';
+    else if (pm.includes('trans')) paymentMethod = 'Transferencia';
+    else paymentMethod = paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1);
+
+    // Parsear fecha robustamente: soporta ISO y formato "DD/MM/YYYY HH:MM:SS"
+    const raw = sale.fecha ?? sale.date ?? new Date().toISOString();
+    let saleDateObj = new Date(raw);
+    if (isNaN(saleDateObj.getTime())) {
+      // Intentar parsear formato DD/MM/YYYY HH:MM:SS
+      try {
+        const [datePart, timePart] = String(raw).split(' ');
+        const [day, month, year] = (datePart ?? '').split('/');
+        const [hour = '00', minute = '00', second = '00'] = (timePart ?? '').split(':');
+        if (day && month && year) {
+          saleDateObj = new Date(
+            parseInt(year, 10),
+            parseInt(month, 10) - 1,
+            parseInt(day, 10),
+            parseInt(hour, 10) || 0,
+            parseInt(minute, 10) || 0,
+            parseInt(second, 10) || 0
+          );
+        }
+      } catch (e) {
+        saleDateObj = new Date();
+      }
+    }
+
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const dateFormatted = `${pad(saleDateObj.getDate())}/${pad(saleDateObj.getMonth() + 1)}/${saleDateObj.getFullYear()} ${pad(saleDateObj.getHours())}:${pad(saleDateObj.getMinutes())}:${pad(saleDateObj.getSeconds())}`;
 
     return {
       id: sale.id ?? `V-${Math.random().toString().slice(2, 6)}`,
-      date: sale.fecha ?? new Date().toISOString(),
-      dateOnly: sale.dateOnly ?? (sale.fecha ?? '').split(' ')[0] ?? new Date().toISOString().split('T')[0],
-      customer: sale.cliente ?? 'Cliente General',
-      dni: sale.dni ?? '---',
-      items: [], // Las ventas del API no incluyen detalle de items
+      // date: cadena legible para la UI, dateObj: instancia para comparar
+      date: dateFormatted,
+      dateObj: saleDateObj,
+      dateOnly: saleDateObj.toISOString().split('T')[0],
+      customer: sale.cliente ?? sale.customer ?? 'Cliente General',
+      dni: sale.dni ?? sale.documento ?? '---',
+      items: sale.items ?? [],
       subtotal,
       discount,
       total,
-      paymentAmount: Number(sale.pago ?? total),
+      paymentAmount: Number(sale.pago ?? sale.paymentAmount ?? total),
       vuelto: Number(sale.vuelto ?? 0),
       paymentMethod,
-      user: sale.usuario ?? 'caja1',
+      user: sale.usuario ?? sale.user ?? 'caja1',
     };
   };
 
@@ -120,59 +151,39 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       
       // Normalizar ventas
       const normalizedSales = allSales.map(normalizeApiSale);
-      
-      // Convertir fecha de apertura a objeto Date
-      const aperturaDate = new Date(aperturaTime);
-      const today = new Date().toISOString().split('T')[0];
-      
+
+      // Convertir fecha de apertura a objeto Date (soporta ISO o DD/MM/YYYY HH:MM:SS)
+      let aperturaDate = new Date(aperturaTime);
+      if (isNaN(aperturaDate.getTime())) {
+        try {
+          const [datePart, timePart] = String(aperturaTime).split(' ');
+          const [day, month, year] = (datePart ?? '').split('/');
+          const [hour = '0', minute = '0', second = '0'] = (timePart ?? '').split(':');
+          aperturaDate = new Date(
+            parseInt(year, 10),
+            parseInt(month, 10) - 1,
+            parseInt(day, 10),
+            parseInt(hour, 10) || 0,
+            parseInt(minute, 10) || 0,
+            parseInt(second, 10) || 0
+          );
+        } catch (e) {
+          aperturaDate = new Date();
+        }
+      }
+
       console.log('Apertura date:', aperturaDate);
-      console.log('Today:', today);
       console.log('Total ventas en API:', normalizedSales.length);
-      
-      // Filtrar ventas que ocurrieron hoy y después de la apertura
-      const ventasHoy = normalizedSales.filter(sale => {
-        // Comparar con dateOnly que viene del API
-        const saleDate = sale.dateOnly;
-        if (!saleDate) return false;
-        
-        // El API devuelve dateOnly en formato YYYY-MM-DD
-        if (saleDate !== today) {
-          console.log('Sale date mismatch:', saleDate, 'vs', today);
-          return false;
-        }
-        
-        // Si la venta es de hoy, verificar si es después de la apertura
-        // Parsear fecha de venta (formato: "DD/MM/YYYY HH:MM:SS")
-        const [dateStr, timeStr] = sale.date.split(' ');
-        if (!dateStr || !timeStr) {
-          console.log('Invalid date format:', sale.date);
-          return false;
-        }
-        
-        const [day, month, year] = dateStr.split('/');
-        const [hour, minute, second] = timeStr.split(':');
-        
-        if (!day || !month || !year || !hour || !minute || !second) {
-          console.log('Invalid date parts');
-          return false;
-        }
-        
-        const saleDateObj = new Date(
-          parseInt(year),
-          parseInt(month) - 1,
-          parseInt(day),
-          parseInt(hour),
-          parseInt(minute),
-          parseInt(second)
-        );
-        
-        const isAfterOpening = saleDateObj >= aperturaDate;
-        console.log('Sale:', sale.id, 'Time:', sale.date, 'After opening:', isAfterOpening);
-        return isAfterOpening;
-      });
-      
-      console.log('Ventas del día después de apertura:', ventasHoy.length);
-      setVentasDelDia(ventasHoy);
+
+      // Filtrar ventas que ocurrieron desde la apertura hasta ahora
+      const ventasDesdeApertura = normalizedSales.filter(sale => {
+        const saleDateObj = sale.dateObj instanceof Date ? sale.dateObj : new Date(sale.date);
+        if (!saleDateObj || isNaN(saleDateObj.getTime())) return false;
+        return saleDateObj >= aperturaDate;
+      }).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+
+      console.log('Ventas desde apertura:', ventasDesdeApertura.length);
+      setVentasDelDia(ventasDesdeApertura);
     } catch (err) {
       console.error('Error cargando ventas:', err);
       setVentasDelDia([]);
