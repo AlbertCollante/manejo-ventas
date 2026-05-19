@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { TrendingUp, TrendingDown, DollarSign, Receipt, Plus, Calendar, FileText, Download } from "lucide-react";
@@ -13,9 +13,12 @@ import { Textarea } from "./ui/textarea";
 import * as XLSX from "xlsx";
 import contabilidadData from "../data/contabilidad.json";
 
+const API_BASE = 'http://localhost:9000';
+
 export function ContabilidadModule() {
   const [egresos, setEgresos] = useState(contabilidadData.egresos);
-  const ingresos = contabilidadData.ingresos;
+  const [ingresos, setIngresos] = useState<any[]>([]);
+  const [productos, setProductos] = useState<any[]>([]);
   
   const [newExpense, setNewExpense] = useState({
     concept: "",
@@ -30,12 +33,62 @@ export function ContabilidadModule() {
   const [selectedDate, setSelectedDate] = useState("");
   const [montoRemesado, setMontoRemesado] = useState("");
   const [montoDejado, setMontoDejado] = useState("");
-  // Filtrar por fechas
+
+  // Cargar datos de la API
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Cargar ventas desde API
+        const ventasRes = await fetch(`${API_BASE}/ventas`);
+        if (ventasRes.ok) {
+          const ventasData = await ventasRes.json();
+          if (Array.isArray(ventasData)) {
+            const normalized = ventasData.map((v: any) => ({
+              id: v.id ?? v.idventa ?? null,
+              date: v.fecha ?? v.date ?? new Date().toISOString(),
+              concept: v.cliente || v.customer || 'Cliente General',
+              total: Number(v.total ?? 0),
+              type: 'Venta'
+            }));
+            setIngresos(normalized);
+          }
+        }
+      } catch (error) {
+        console.error('Error cargando ventas:', error);
+      }
+
+      try {
+        // Cargar productos desde API
+        const productosRes = await fetch(`${API_BASE}/inventario-productos`);
+        if (productosRes.ok) {
+          const productosData = await productosRes.json();
+          if (Array.isArray(productosData)) {
+            const normalized = productosData.map((p: any) => ({
+              id: p.id ?? p.idproducto ?? null,
+              name: p.nombre ?? p.name ?? '',
+              purchasePrice: Number(p.precio_compra ?? p.purchasePrice ?? 0),
+              date: p.id ?? p.idproducto ?? ''
+            }));
+            setProductos(normalized);
+          }
+        }
+      } catch (error) {
+        console.error('Error cargando productos:', error);
+      }
+    };
+
+    loadData();
+  }, []);
+  
   const filterByDate = (items: any[]) => {
     if (!filterStartDate && !filterEndDate) return items;
     
     return items.filter(item => {
-      const itemDate = new Date(item.date.split('/').reverse().join('-'));
+      const rawDate = item.date || item.fecha || new Date().toISOString();
+      const dateStr = typeof rawDate === 'string' ? rawDate : new Date(rawDate).toISOString();
+      const itemDate = dateStr.includes('/') 
+        ? new Date(dateStr.split('/').reverse().join('-'))
+        : new Date(dateStr);
       const start = filterStartDate ? new Date(filterStartDate) : null;
       const end = filterEndDate ? new Date(filterEndDate) : null;
       
@@ -51,12 +104,22 @@ export function ContabilidadModule() {
   };
 
   const filteredIngresos = filterByDate(ingresos);
-  const filteredEgresos = filterByDate(egresos);
+  const filteredEgresos = filterByDate(productos.map(p => ({
+    ...p,
+    amount: p.purchasePrice,
+    concept: p.name,
+    type: 'Compra'
+  })));
   
-  const totalIngresos = filteredIngresos.reduce((sum, item) => sum + item.amount, 0);
-  const totalEgresos = filteredEgresos.reduce((sum, item) => sum + item.amount, 0);
+  // Sumatoria de ingresos (total de ventas)
+  const totalIngresos = filteredIngresos.reduce((sum, item) => sum + (item.total || 0), 0);
+  
+  // Sumatoria de egresos (suma de precios de compra de productos)
+  const totalEgresos = filteredEgresos.reduce((sum, item) => sum + (item.amount || 0), 0);
+  
   const balance = totalIngresos - totalEgresos;
 
+  /*
   const estadoResultados = {
     ventasBrutas: ingresos.reduce((sum, item) => sum + item.amount, 0),
     costoVentas: egresos.filter(e => e.type === "Compra").reduce((sum, item) => sum + item.amount, 0),
@@ -68,6 +131,7 @@ export function ContabilidadModule() {
   const utilidadBruta = estadoResultados.ventasBrutas - estadoResultados.costoVentas;
   const utilidadOperativa = utilidadBruta - estadoResultados.gastoOperativos;
   const utilidadNeta = utilidadOperativa - estadoResultados.gastosAdmin - estadoResultados.otrosGastos;
+  */
 
   const handleAddExpense = () => {
     if (!newExpense.concept || !newExpense.amount || !newExpense.type) {
@@ -195,6 +259,7 @@ export function ContabilidadModule() {
           <h2 style={{ color: '#9AAD97' }}>Módulo de Contabilidad</h2>
           <p className="text-muted-foreground">Gestión financiera y reportes contables</p>
         </div>
+        {/* Botón comentado: Agregar Gasto
         <Dialog>
           <DialogTrigger asChild>
             <Button style={{ backgroundColor: '#D5B888', color: 'white', border: 'none' }}>
@@ -266,7 +331,7 @@ export function ContabilidadModule() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
+        */}</div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card style={{ borderTop: '4px solid #9AAD97' }}>
@@ -311,6 +376,7 @@ export function ContabilidadModule() {
           </CardContent>
         </Card>
 
+        {/* Card comentado: Utilidad Neta
         <Card style={{ borderTop: '4px solid #D5B888' }}>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
@@ -324,12 +390,13 @@ export function ContabilidadModule() {
             </div>
           </CardContent>
         </Card>
+        */}
       </div>
 
       <Tabs defaultValue="movimientos">
         <TabsList>
           <TabsTrigger value="movimientos">Movimientos</TabsTrigger>
-          <TabsTrigger value="estado">Estado de Resultados</TabsTrigger>
+          {/* <TabsTrigger value="estado">Estado de Resultados</TabsTrigger> */}
         </TabsList>
 
         <TabsContent value="movimientos" className="space-y-4">
@@ -342,33 +409,30 @@ export function ContabilidadModule() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
+                <div style={{ maxHeight: '400px', overflowY: 'auto', overflowX: 'hidden' }}>
+                  <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Fecha</TableHead>
                       <TableHead>Concepto</TableHead>
-                      <TableHead>Monto</TableHead>
+                      <TableHead>Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredIngresos.map((item) => (
                       <TableRow key={item.id}>
-                        <TableCell>{item.date}</TableCell>
+                        <TableCell>{new Date(item.date).toLocaleDateString('es-PE')}</TableCell>
                         <TableCell>
-                          <div>
-                            <p className="text-sm">{item.concept}</p>
-                            <Badge variant="outline" className="text-xs mt-1">
-                              {item.type}
-                            </Badge>
-                          </div>
+                          <p className="text-sm">{item.concept}</p>
                         </TableCell>
                         <TableCell style={{ color: '#9AAD97', fontWeight: 'bold' }}>
-                          + S/ {item.amount.toFixed(2)}
+                          + S/ {(item.total || 0).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </CardContent>
             </Card>
 
@@ -380,38 +444,36 @@ export function ContabilidadModule() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
+                <div style={{ maxHeight: '400px', overflowY: 'auto', overflowX: 'hidden' }}>
+                  <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Concepto</TableHead>
-                      <TableHead>Monto</TableHead>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Precio Compra</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredEgresos.map((item) => (
                       <TableRow key={item.id}>
-                        <TableCell>{item.date}</TableCell>
+                        <TableCell>{item.id}</TableCell>
                         <TableCell>
-                          <div>
-                            <p className="text-sm">{item.concept}</p>
-                            <Badge variant="outline" className="text-xs mt-1">
-                              {item.type}
-                            </Badge>
-                          </div>
+                          <p className="text-sm">{item.concept}</p>
                         </TableCell>
                         <TableCell style={{ color: '#D5B888', fontWeight: 'bold' }}>
-                          - S/ {item.amount.toFixed(2)}
+                          - S/ {(item.amount || 0).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
+        {/* Tab comentada: Estado de Resultados
         <TabsContent value="estado">
           <Card style={{ borderTop: '4px solid #D5B888' }}>
             <CardHeader>
@@ -480,9 +542,11 @@ export function ContabilidadModule() {
             </CardContent>
           </Card>
         </TabsContent>
+        */}
       </Tabs>
 
       <div className="space-y-4">
+        {/* Ventanas comentadas: Filtrar por Fecha, Detalle por Día, Registrar Recibo
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card>
             <CardHeader>
@@ -652,7 +716,9 @@ export function ContabilidadModule() {
             </CardContent>
           </Card>
         </div>
+        */}
 
+        {/* Reporte de Gastos por Categoría comentado
         <Card style={{ borderTop: '4px solid #D5B888' }}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2" style={{ color: '#D5B888' }}>
@@ -710,6 +776,7 @@ export function ContabilidadModule() {
             </div>
           </CardContent>
         </Card>
+        */}
       </div>
     </div>
   );
