@@ -156,20 +156,19 @@ export function InventarioModule() {
   const [codeSearch, setCodeSearch] = useState("");
   
   const [newProduct, setNewProduct] = useState({
-    code: "",
-    name: "",
-    category: "",
-    brand: "",
-    stock: 0,
-    minStock: 0,
-    purchasePrice: 0,
-    marginPercentage: 30,
-    unitsPerBlister: 10,
-    blistersPerBox: 10,
-    expiry: "",
-    location: "",
-    shelf: ""
+    marca: "",
+    nombre: "",
+    categoria: "",
+    estante: "",
+    stock_actual: 0,
+    stock_minimo: 0,
+    vencimiento: "",
+    precio_caja: 0,
+    precio_compra: 0,
+    precio_unitario: 0
   });
+
+  const [addProductLoading, setAddProductLoading] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -253,57 +252,92 @@ export function InventarioModule() {
     return Math.max(0, price * (1 + marginValue / 100));
   };
 
-  const handleAddProduct = () => {
-    if (!newProduct.code || !newProduct.name || !newProduct.category) {
-      alert("Por favor complete los campos obligatorios");
+  const handleAddProduct = async () => {
+    // Validación de campos requeridos
+    if (
+      !newProduct.marca ||
+      !newProduct.nombre ||
+      newProduct.stock_actual === undefined ||
+      newProduct.stock_minimo === undefined ||
+      !newProduct.vencimiento ||
+      newProduct.precio_caja === undefined ||
+      newProduct.precio_compra === undefined ||
+      newProduct.precio_unitario === undefined
+    ) {
+      alert("Por favor complete todos los campos obligatorios");
       return;
     }
 
-    const priceUnit = calculateSalePrice(newProduct.purchasePrice, newProduct.marginPercentage);
-    const priceBlister = priceUnit * newProduct.unitsPerBlister * 0.95; // 5% descuento
-    const priceBox = priceBlister * newProduct.blistersPerBox * 0.90; // 10% descuento
+    setAddProductLoading(true);
 
-    const product: Product = {
-      id: products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1,
-      code: newProduct.code,
-      name: newProduct.name,
-      category: newProduct.category,
-      brand: newProduct.brand,
-      stock: newProduct.stock,
-      minStock: newProduct.minStock,
-      purchasePrice: newProduct.purchasePrice,
-      priceUnit,
-      priceBlister,
-      priceBox,
-      unitsPerBlister: newProduct.unitsPerBlister,
-      blistersPerBox: newProduct.blistersPerBox,
-      expiry: newProduct.expiry,
-      location: newProduct.location,
-      shelf: newProduct.shelf
-    };
+    try {
+      // Calcular los campos automáticos
+      const ganancia = newProduct.precio_unitario * newProduct.stock_actual;
+      const compra = newProduct.precio_compra;
 
-    const updatedProducts = [...products, product];
-    setProducts(updatedProducts);
-    
-    // Guardar en localStorage con la clave correcta
-    localStorage.setItem('botica_products', JSON.stringify(updatedProducts));
-    
-    setNewProduct({
-      code: "",
-      name: "",
-      category: "",
-      brand: "",
-      stock: 0,
-      minStock: 0,
-      purchasePrice: 0,
-      marginPercentage: 30,
-      unitsPerBlister: 10,
-      blistersPerBox: 10,
-      expiry: "",
-      location: "",
-      shelf: ""
-    });
-    alert("Producto agregado exitosamente");
+      const payload = {
+        marca: newProduct.marca,
+        nombre: newProduct.nombre,
+        categoria: newProduct.categoria || null,
+        estante: newProduct.estante || null,
+        stock_actual: newProduct.stock_actual,
+        stock_minimo: newProduct.stock_minimo,
+        vencimiento: newProduct.vencimiento,
+        precio_caja: newProduct.precio_caja,
+        precio_compra: newProduct.precio_compra,
+        precio_unitario: newProduct.precio_unitario,
+        ganancia,
+        compra
+      };
+
+      const response = await fetch(`${API_BASE}/agregar-producto`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Error al agregar el producto');
+      }
+
+      const result = await response.json();
+
+      // Mostrar mensaje de éxito
+      alert(`✓ Producto agregado correctamente\nID: ${result.idproducto}`);
+
+      // Recargar los productos
+      const inventarioResponse = await fetch(`${API_BASE}/inventario-productos`);
+      if (inventarioResponse.ok) {
+        const data = await inventarioResponse.json();
+        if (Array.isArray(data)) {
+          const normalized = data.map(normalizeApiProduct);
+          setProducts(normalized);
+          localStorage.setItem('botica_products', JSON.stringify(normalized));
+        }
+      }
+
+      // Limpiar formulario
+      setNewProduct({
+        marca: "",
+        nombre: "",
+        categoria: "",
+        estante: "",
+        stock_actual: 0,
+        stock_minimo: 0,
+        vencimiento: "",
+        precio_caja: 0,
+        precio_compra: 0,
+        precio_unitario: 0
+      });
+
+    } catch (error) {
+      alert(`Error: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    } finally {
+      setAddProductLoading(false);
+    }
   };
 
   const handleUpdateProduct = () => {
@@ -438,186 +472,180 @@ export function InventarioModule() {
                   Nuevo Producto
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle style={{ color: '#D5B888' }}>Agregar Nuevo Producto</DialogTitle>
                   <DialogDescription>
-                    Complete los datos del nuevo producto para agregarlo al inventario.
+                    Complete todos los datos del nuevo producto. Los campos marcados con * son obligatorios.
                   </DialogDescription>
                 </DialogHeader>
-                <Tabs defaultValue="basico">
-                  <TabsList className="grid w-full grid-cols-3" style={{ backgroundColor: 'rgba(154, 173, 151, 0.1)', borderBottom: `2px solid #9AAD97` }}>
-                    <TabsTrigger value="basico" style={{ color: '#9AAD97' }}>Información Básica</TabsTrigger>
-                    <TabsTrigger value="precios" style={{ color: '#D5B888' }}>Precios</TabsTrigger>
-                    <TabsTrigger value="ubicacion" style={{ color: '#9AAD97' }}>Ubicación</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="basico" className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label style={{ color: '#D5B888' }}>Código *</Label>
-                        <Input 
-                          placeholder="MED007" 
-                          value={newProduct.code}
-                          onChange={(e) => setNewProduct({...newProduct, code: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <Label style={{ color: '#9AAD97' }}>Marca *</Label>
-                        <Select value={newProduct.brand} onValueChange={(v: any) => setNewProduct({...newProduct, brand: v})}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar marca" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {brands.map(b => (
-                              <SelectItem key={b} value={b}>{b}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+                <div className="space-y-4">
+                  {/* Marca y Nombre */}
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label style={{ color: '#D5B888' }}>Nombre del Producto *</Label>
+                      <Label style={{ color: '#D5B888' }}>Marca *</Label>
                       <Input 
-                        placeholder="Nombre del medicamento" 
-                        value={newProduct.name}
-                        onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
+                        list="marcas-list"
+                        placeholder="Escribir o seleccionar marca" 
+                        value={newProduct.marca}
+                        onChange={(e) => setNewProduct({...newProduct, marca: e.target.value})}
                       />
+                      <datalist id="marcas-list">
+                        {brands.map(b => (
+                          <option key={b} value={b} />
+                        ))}
+                      </datalist>
                     </div>
                     <div>
-                      <Label style={{ color: '#9AAD97' }}>Categoría *</Label>
-                      <Select value={newProduct.category} onValueChange={(v: any) => setNewProduct({...newProduct, category: v})}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar categoría" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.slice(1).map((cat) => (
-                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label style={{ color: '#D5B888' }}>Stock Inicial</Label>
-                        <Input 
-                          type="number" 
-                          placeholder="100" 
-                          value={newProduct.stock}
-                          onChange={(e) => setNewProduct({...newProduct, stock: parseInt(e.target.value) || 0})}
-                        />
-                      </div>
-                      <div>
-                        <Label style={{ color: '#9AAD97' }}>Stock Mínimo</Label>
-                        <Input 
-                          type="number" 
-                          placeholder="30" 
-                          value={newProduct.minStock}
-                          onChange={(e) => setNewProduct({...newProduct, minStock: parseInt(e.target.value) || 0})}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label style={{ color: '#D5B888' }}>Fecha de Vencimiento</Label>
+                      <Label style={{ color: '#9AAD97' }}>Categoría</Label>
                       <Input 
-                        type="text" 
-                        placeholder="MM/YYYY" 
-                        value={newProduct.expiry}
-                        onChange={(e) => setNewProduct({...newProduct, expiry: e.target.value})}
+                        list="categorias-list"
+                        placeholder="Escribir o seleccionar categoría" 
+                        value={newProduct.categoria}
+                        onChange={(e) => setNewProduct({...newProduct, categoria: e.target.value})}
                       />
+                      <datalist id="categorias-list">
+                        {categories.slice(1).map(cat => (
+                          <option key={cat} value={cat} />
+                        ))}
+                      </datalist>
                     </div>
-                  </TabsContent>
+                  </div>
 
-                  <TabsContent value="precios" className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label style={{ color: '#9AAD97' }}>Precio de Compra *</Label>
+                  {/* Nombre del producto */}
+                  <div>
+                    <Label style={{ color: '#D5B888' }}>Nombre del Producto *</Label>
+                    <Input 
+                      placeholder="Ej: Paracetamol 500mg" 
+                      value={newProduct.nombre}
+                      onChange={(e) => setNewProduct({...newProduct, nombre: e.target.value})}
+                    />
+                  </div>
+
+                  {/* Estante */}
+                  <div>
+                    <Label style={{ color: '#9AAD97' }}>Estante</Label>
+                    <Input 
+                      placeholder="Ej: A1, B2, C3" 
+                      value={newProduct.estante}
+                      onChange={(e) => setNewProduct({...newProduct, estante: e.target.value})}
+                    />
+                  </div>
+
+                  {/* Stock */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label style={{ color: '#9AAD97' }}>Stock Actual *</Label>
+                      <Input 
+                        type="number" 
+                        placeholder="100" 
+                        value={newProduct.stock_actual}
+                        onChange={(e) => setNewProduct({...newProduct, stock_actual: parseInt(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div>
+                      <Label style={{ color: '#D5B888' }}>Stock Mínimo *</Label>
+                      <Input 
+                        type="number" 
+                        placeholder="30" 
+                        value={newProduct.stock_minimo}
+                        onChange={(e) => setNewProduct({...newProduct, stock_minimo: parseInt(e.target.value) || 0})}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Vencimiento */}
+                  <div>
+                    <Label style={{ color: '#9AAD97' }}>Fecha de Vencimiento (MM/YYYY) *</Label>
+                    <Input 
+                      type="month"
+                      value={newProduct.vencimiento ? 
+                        (() => {
+                          const parts = newProduct.vencimiento.split('/');
+                          if (parts.length === 2) {
+                            const [month, year] = parts;
+                            return `${year}-${month.padStart(2, '0')}`;
+                          }
+                          return '';
+                        })() 
+                        : ''
+                      }
+                      onChange={(e) => {
+                        const date = e.target.value;
+                        if (date) {
+                          const [year, month] = date.split('-');
+                          setNewProduct({...newProduct, vencimiento: `${month}/${year}`});
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Precios */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label style={{ color: '#D5B888' }}>Precio de Compra Unitario *</Label>
+                      <div className="relative mt-2">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                         <Input 
                           type="number" 
                           step="0.01" 
                           placeholder="0.00" 
-                          value={newProduct.purchasePrice}
-                          onChange={(e) => setNewProduct({...newProduct, purchasePrice: parseFloat(e.target.value) || 0})}
+                          value={newProduct.precio_compra}
+                          onChange={(e) => setNewProduct({...newProduct, precio_compra: parseFloat(e.target.value) || 0})}
+                          className="pl-10"
                         />
                       </div>
-                      <div>
-                        <Label style={{ color: '#D5B888' }}>Margen de Ganancia (%)</Label>
+                    </div>
+                    <div>
+                      <Label style={{ color: '#9AAD97' }}>Precio Unitario *</Label>
+                      <div className="relative mt-2">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                         <Input 
                           type="number" 
-                          placeholder="30" 
-                          value={newProduct.marginPercentage}
-                          onChange={(e) => setNewProduct({...newProduct, marginPercentage: parseInt(e.target.value) || 30})}
+                          step="0.01" 
+                          placeholder="0.00" 
+                          value={newProduct.precio_unitario}
+                          onChange={(e) => setNewProduct({...newProduct, precio_unitario: parseFloat(e.target.value) || 0})}
+                          className="pl-10"
                         />
                       </div>
                     </div>
-                    <div className="p-4 rounded-lg" style={{ backgroundColor: 'rgba(213, 184, 136, 0.1)', borderLeft: `4px solid #D5B888` }}>
-                      <p className="text-sm" style={{ color: '#D5B888', fontWeight: 'bold' }}>Precio de venta calculado (Unidad): 
-                        <span className="ml-2">
-                          S/ {calculateSalePrice(newProduct.purchasePrice, newProduct.marginPercentage).toFixed(2)}
-                        </span>
-                      </p>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label style={{ color: '#9AAD97' }}>Unidades por Blíster</Label>
+                    <div>
+                      <Label style={{ color: '#D5B888' }}>Precio Caja *</Label>
+                      <div className="relative mt-2">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                         <Input 
                           type="number" 
-                          placeholder="10" 
-                          value={newProduct.unitsPerBlister}
-                          onChange={(e) => setNewProduct({...newProduct, unitsPerBlister: parseInt(e.target.value) || 10})}
-                        />
-                      </div>
-                      <div>
-                        <Label style={{ color: '#D5B888' }}>Blísteres por Caja</Label>
-                        <Input 
-                          type="number" 
-                          placeholder="10" 
-                          value={newProduct.blistersPerBox}
-                          onChange={(e) => setNewProduct({...newProduct, blistersPerBox: parseInt(e.target.value) || 10})}
+                          step="0.01" 
+                          placeholder="0.00" 
+                          value={newProduct.precio_caja}
+                          onChange={(e) => setNewProduct({...newProduct, precio_caja: parseFloat(e.target.value) || 0})}
+                          className="pl-10"
                         />
                       </div>
                     </div>
-                    
-                    <div className="p-4 rounded-lg space-y-2" style={{ backgroundColor: 'rgba(154, 173, 151, 0.1)', borderLeft: `4px solid #9AAD97` }}>
-                      <p className="text-sm" style={{ color: '#9AAD97', fontWeight: 'bold' }}>Precio Blíster (5% desc): 
-                        <span className="ml-2">
-                          S/ {(calculateSalePrice(newProduct.purchasePrice, newProduct.marginPercentage) * newProduct.unitsPerBlister * 0.95).toFixed(2)}
-                        </span>
-                      </p>
-                      <p className="text-sm" style={{ color: '#9AAD97', fontWeight: 'bold' }}>Precio Caja (10% desc): 
-                        <span className="ml-2">
-                          S/ {(calculateSalePrice(newProduct.purchasePrice, newProduct.marginPercentage) * newProduct.unitsPerBlister * newProduct.blistersPerBox * 0.90).toFixed(2)}
-                        </span>
-                      </p>
-                    </div>
-                  </TabsContent>
+                  </div>
 
-                  <TabsContent value="ubicacion" className="space-y-4">
-                    <div>
-                      <Label>Ubicación/Estante</Label>
-                      <Select value={newProduct.location} onValueChange={(v: any) => setNewProduct({...newProduct, location: v, shelf: v})}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar ubicación" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {locations.slice(1).map((loc) => (
-                            <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Código de Estante</Label>
-                      <Input 
-                        placeholder="A1" 
-                        value={newProduct.shelf}
-                        onChange={(e) => setNewProduct({...newProduct, shelf: e.target.value})}
-                      />
-                    </div>
-                  </TabsContent>
-                </Tabs>
-                <Button className="w-full" onClick={handleAddProduct} style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}>Guardar Producto</Button>
+                  {/* Info de cálculos automáticos */}
+                  <div className="p-3 rounded-lg" style={{ backgroundColor: 'rgba(154, 173, 151, 0.1)', borderLeft: `4px solid #9AAD97` }}>
+                    <p className="text-xs text-muted-foreground mb-2">Los siguientes valores se calcularán automáticamente:</p>
+                    <p className="text-sm" style={{ color: '#9AAD97', fontWeight: 'bold' }}>
+                      Ganancia: S/ {(newProduct.precio_unitario * newProduct.stock_actual).toFixed(2)}
+                    </p>
+                    <p className="text-sm" style={{ color: '#9AAD97', fontWeight: 'bold' }}>
+                      Compra: S/ {newProduct.precio_compra.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                <Button 
+                  className="w-full" 
+                  onClick={handleAddProduct} 
+                  disabled={addProductLoading}
+                  style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
+                >
+                  {addProductLoading ? 'Guardando...' : 'Guardar Producto'}
+                </Button>
               </DialogContent>
             </Dialog>
           )}

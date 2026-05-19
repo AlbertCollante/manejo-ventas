@@ -512,6 +512,16 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const totalTarjetaHistorico = cierresHistorico.reduce((sum, c) => sum + c.montosContados.tarjeta, 0);
   const totalTransferenciaHistorico = cierresHistorico.reduce((sum, c) => sum + c.montosContados.transferencia, 0);
 
+  // Verificar si el usuario es administrador
+  const isAdmin = currentUser.role?.toLowerCase() === 'admin' || currentUser.role?.toLowerCase() === 'administrador';
+
+  // Si no es admin y está en una pestaña de admin, cambiar a "actual"
+  useEffect(() => {
+    if (!isAdmin && (activeTab === "historial" || activeTab === "reporte")) {
+      setActiveTab("actual");
+    }
+  }, [isAdmin, activeTab]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -532,20 +542,24 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
             >
               Cierre Actual
             </Button>
-            <Button 
-              variant={activeTab === "historial" ? "default" : "outline"}
-              onClick={() => setActiveTab("historial")}
-              style={activeTab === "historial" ? { backgroundColor: '#9AAD97', color: 'white' } : {}}
-            >
-              Historial de Cierres
-            </Button>
-            <Button 
-              variant={activeTab === "reporte" ? "default" : "outline"}
-              onClick={() => setActiveTab("reporte")}
-              style={activeTab === "reporte" ? { backgroundColor: '#9AAD97', color: 'white' } : {}}
-            >
-              Reporte por Fechas
-            </Button>
+            {isAdmin && (
+              <>
+                <Button 
+                  variant={activeTab === "historial" ? "default" : "outline"}
+                  onClick={() => setActiveTab("historial")}
+                  style={activeTab === "historial" ? { backgroundColor: '#9AAD97', color: 'white' } : {}}
+                >
+                  Historial de Cierres
+                </Button>
+                <Button 
+                  variant={activeTab === "reporte" ? "default" : "outline"}
+                  onClick={() => setActiveTab("reporte")}
+                  style={activeTab === "reporte" ? { backgroundColor: '#9AAD97', color: 'white' } : {}}
+                >
+                  Reporte por Fechas
+                </Button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -860,7 +874,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       )}
 
       {/* TAB 2: HISTORIAL DE CIERRES */}
-      {activeTab === "historial" && (
+      {isAdmin && activeTab === "historial" && (
         <>
           <Card>
             <CardHeader>
@@ -917,7 +931,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       )}
 
       {/* TAB 3: REPORTE POR FECHAS */}
-      {activeTab === "reporte" && (
+      {isAdmin && activeTab === "reporte" && (
         <>
           <Card>
             <CardHeader>
