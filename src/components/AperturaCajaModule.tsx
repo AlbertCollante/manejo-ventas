@@ -87,7 +87,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
   }, []);
 
   const handleAperturaCaja = async () => {
-    if (!montoInicial || parseFloat(montoInicial) <= 0) {
+    if (montoInicial === "" || parseFloat(montoInicial) < 0) {
       alert("Por favor ingrese un monto válido");
       return;
     }
@@ -237,7 +237,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
           </CardHeader>
           <CardContent>
             {aperturas.length > 0 ? (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-16 overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -249,7 +249,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {aperturas.slice(0, 5).map((apertura) => (
+                    {aperturas.slice().reverse().map((apertura) => (
                       <TableRow key={apertura.id}>
                         <TableCell className="text-sm">{apertura.fecha}</TableCell>
                         <TableCell>{apertura.usuario}</TableCell>
