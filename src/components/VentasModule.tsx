@@ -98,14 +98,12 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       const data = await resp.json();
       if (Array.isArray(data)) {
         const normalized = data.map((s: any) => {
-          const rawDate = s.fecha ?? s.date ?? new Date().toISOString();
-          let isoDate = new Date(rawDate).toISOString();
-          if (isoDate === 'Invalid Date') isoDate = new Date().toISOString();
-          const dateOnly = isoDate.split('T')[0];
+          const rawDate = s.fecha ?? s.date ?? '';
+          console.log(rawDate)
           return {
             id: s.id ?? s.idventa ?? null,
-            date: isoDate,
-            dateOnly,
+            date: rawDate,
+            dateOnly: rawDate.split(' ')[0],
             customer: s.cliente || s.customer || 'Cliente General',
             dni: s.dni || s.DNI || '---',
             items: s.items || s.detalle || [],
@@ -1316,7 +1314,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                   return displayedSales.map((sale) => (
                     <TableRow key={sale.id}>
                       <TableCell>{sale.id}</TableCell>
-                      <TableCell>{sale.dateOnly}</TableCell>
+                      <TableCell>{sale.date}</TableCell>
                       <TableCell>{sale.customer}</TableCell>
                       <TableCell>S/ {sale.total.toFixed(2)}</TableCell>
                       <TableCell>{sale.user}</TableCell>
