@@ -172,8 +172,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
         }
       }
 
-      console.log('Apertura date:', aperturaDate);
-      console.log('Total ventas en API:', normalizedSales.length);
+      //console.log('Apertura date:', aperturaDate);
+      //console.log('Total ventas en API:', normalizedSales.length);
 
       // Filtrar ventas que ocurrieron desde la apertura hasta ahora
       const ventasDesdeApertura = normalizedSales.filter(sale => {
@@ -182,7 +182,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
         return saleDateObj >= aperturaDate;
       }).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
 
-      console.log('Ventas desde apertura:', ventasDesdeApertura.length);
+      //console.log('Ventas desde apertura:', ventasDesdeApertura.length);
       setVentasDelDia(ventasDesdeApertura);
     } catch (err) {
       console.error('Error cargando ventas:', err);
@@ -332,8 +332,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     }
 
     // Función simulada - en producción sería un llamado a backend
-    console.log("Enviando reporte a:", email);
-    console.log("Datos de ventas:", ventasDelDia);
+    //console.log("Enviando reporte a:", email);
+    //console.log("Datos de ventas:", ventasDelDia);
     alert(`Reporte de cierre enviado a: ${email}\nTotal de ventas: S/ ${totalVentas.toFixed(2)}`);
   };
 

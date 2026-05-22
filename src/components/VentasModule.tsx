@@ -99,7 +99,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       if (Array.isArray(data)) {
         const normalized = data.map((s: any) => {
           const rawDate = s.fecha ?? s.date ?? '';
-          console.log(rawDate)
+          //console.log(rawDate)
           return {
             id: s.id ?? s.idventa ?? null,
             date: rawDate,
@@ -214,7 +214,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       ...product,
       price: product.price || product.priceUnit || 0
     };
-    console.log('Agregando al carrito:', productWithPrice);
+    //console.log('Agregando al carrito:', productWithPrice);
     
     const existing = cart.find(item => item.id === product.id);
     if (existing) {
@@ -565,7 +565,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       doc.addImage(logo, 'PNG', 18, y, 44, 44);
       y += 50;
     } catch (e) {
-      console.log('No se pudo cargar el logo');
+      //console.log('No se pudo cargar el logo');
     } 
 
 

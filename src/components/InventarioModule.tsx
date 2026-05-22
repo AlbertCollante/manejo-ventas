@@ -630,10 +630,10 @@ export function InventarioModule() {
                   <div className="p-3 rounded-lg" style={{ backgroundColor: 'rgba(154, 173, 151, 0.1)', borderLeft: `4px solid #9AAD97` }}>
                     <p className="text-xs text-muted-foreground mb-2">Los siguientes valores se calcularán automáticamente:</p>
                     <p className="text-sm" style={{ color: '#9AAD97', fontWeight: 'bold' }}>
-                      Ganancia: S/ {(newProduct.precio_unitario * newProduct.stock_actual).toFixed(2)}
+                      Ganancia: S/ {(newProduct.precio_unitario * newProduct.stock_actual - newProduct.precio_compra * newProduct.stock_actual).toFixed(2)}
                     </p>
                     <p className="text-sm" style={{ color: '#9AAD97', fontWeight: 'bold' }}>
-                      Compra: S/ {newProduct.precio_compra.toFixed(2)}
+                      Compra Total: S/ {(newProduct.precio_compra * newProduct.stock_actual).toFixed(2)}
                     </p>
                   </div>
                 </div>

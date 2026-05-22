@@ -94,7 +94,7 @@ export function ProveedoresModule() {
     const file = e.target.files?.[0];
     if (file) {
       setExcelFile(file);
-      console.log("Archivo Excel seleccionado:", file.name);
+      //console.log("Archivo Excel seleccionado:", file.name);
       alert(`Archivo "${file.name}" cargado exitosamente.\nEn producción, aquí se procesaría el archivo Excel.`);
       // En producción, aquí se procesaría el archivo Excel con una librería como xlsx
     }
