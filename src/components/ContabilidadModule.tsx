@@ -66,7 +66,7 @@ export function ContabilidadModule() {
             const normalized = productosData.map((p: any) => ({
               id: p.id ?? p.idproducto ?? null,
               name: p.nombre ?? p.name ?? '',
-              purchasePrice: Number(p.precio_compra ?? p.purchasePrice ?? 0),
+              purchasePrice: Number(p.compra ?? p.purchasePrice ?? 0),
               date: p.id ?? p.idproducto ?? ''
             }));
             setProductos(normalized);
