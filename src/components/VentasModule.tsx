@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -14,13 +14,32 @@ import { dataService } from "../services/dataService";
 
 const API_BASE = 'http://localhost:9000';
 
+const parseOptionalPrice = (value: unknown): number | null => {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+const getMayoristaPriceInfo = (product: any): { price: number; label: string } | null => {
+  const precioBlister = parseOptionalPrice(product.precio_blister ?? product.priceBlister);
+  if (precioBlister != null) {
+    return { price: precioBlister, label: 'Precio blister' };
+  }
+  const precioCaja = parseOptionalPrice(product.precio_caja_venta);
+  if (precioCaja != null) {
+    return { price: precioCaja, label: 'Precio caja' };
+  }
+  return null;
+};
+
 const normalizeApiProduct = (product: any) => {
   const stock = Number(product.stock_actual ?? product.stock ?? 0);
   const minStock = Number(product.stock_minimo ?? product.minStock ?? 0);
   const purchasePrice = Number(product.precio_compra ?? product.purchasePrice ?? 0);
   const priceUnit = Number(product.precio_unitario ?? product.priceUnit ?? 0);
-  const priceBlister = Number(product.precio_blister ?? product.priceBlister ?? 0);
-  const priceBox = Number(product.precio_caja ?? product.precio_caja_venta ?? product.priceBox ?? 0);
+  const priceBlister = parseOptionalPrice(product.precio_blister ?? product.priceBlister);
+  const priceBoxVenta = parseOptionalPrice(product.precio_caja_venta);
+  const priceBox = priceBoxVenta ?? (Number(product.precio_caja ?? product.priceBox ?? 0) || 0);
 
   return {
     id: Number(product.id ?? 0),
@@ -32,7 +51,7 @@ const normalizeApiProduct = (product: any) => {
     minStock,
     purchasePrice,
     priceUnit,
-    priceBlister,
+    priceBlister: priceBlister ?? 0,
     priceBox,
     unitsPerBlister: Number(product.unidades_blister ?? product.unitsPerBlister ?? 0),
     blistersPerBox: Number(product.blisters_caja ?? product.blistersPerBox ?? 0),
@@ -44,7 +63,7 @@ const normalizeApiProduct = (product: any) => {
     precio_compra: purchasePrice,
     precio_unitario: priceUnit,
     precio_blister: priceBlister,
-    precio_caja_venta: Number(product.precio_caja_venta ?? priceBox),
+    precio_caja_venta: priceBoxVenta,
     unidades_blister: Number(product.unidades_blister ?? product.unitsPerBlister ?? 0),
     blisters_caja: Number(product.blisters_caja ?? product.blistersPerBox ?? 0),
     vencimiento: product.vencimiento ?? product.expiry ?? "",
@@ -89,6 +108,11 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
   const [products, setProducts] = useState<any[]>([]);
   const [availableCoupons, setAvailableCoupons] = useState<any[]>([]);
   const [loadingSales, setLoadingSales] = useState(false);
+  const [showMayoristaDialog, setShowMayoristaDialog] = useState(false);
+  const [mayoristaProduct, setMayoristaProduct] = useState<any | null>(null);
+  const [mayoristaUnits, setMayoristaUnits] = useState<string>("");
+  const [mayoristaPrice, setMayoristaPrice] = useState<string>("");
+  const [hoveredMayoristaProductId, setHoveredMayoristaProductId] = useState<number | null>(null);
 
   const fetchSales = async () => {
     setLoadingSales(true);
@@ -228,11 +252,63 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     }
   };
 
-  const removeFromCart = (productId: number) => {
+  const openMayoristaDialog = (product: any) => {
+    setMayoristaProduct(product);
+    const defaultUnits = Number(product.unitsPerBlister ?? product.unidades_blister ?? 0);
+    const mayoristaInfo = getMayoristaPriceInfo(product);
+    setMayoristaUnits(defaultUnits > 0 ? String(defaultUnits) : "");
+    setMayoristaPrice(mayoristaInfo ? String(mayoristaInfo.price) : "");
+    setShowMayoristaDialog(true);
+  };
+
+  const addMayoristaToCart = () => {
+    if (!mayoristaProduct) return;
+
+    const units = Math.floor(Number(mayoristaUnits));
+    const price = Number(mayoristaPrice);
+
+    if (!units || units <= 0) {
+      alert("Ingrese la cantidad de pastillas a descontar del inventario (mayor a 0)");
+      return;
+    }
+
+    if (!price || price <= 0) {
+      alert("Ingrese el precio mayorista (mayor a 0)");
+      return;
+    }
+
+    if (Number.isFinite(mayoristaProduct.stock) && Number(mayoristaProduct.stock) < units) {
+      alert(`Stock insuficiente. Stock actual: ${mayoristaProduct.stock}`);
+      return;
+    }
+
+    const cartId = `mayorista-${mayoristaProduct.id}-${Date.now()}`;
+
+    setCart(prev => [
+      ...prev,
+      {
+        ...mayoristaProduct,
+        id: cartId,
+        productId: mayoristaProduct.id,
+        name: `Mayorista - ${mayoristaProduct.name ?? mayoristaProduct.nombre ?? ""}`.trim(),
+        price,
+        quantity: 1,
+        isMayorista: true,
+        unitsPerMayorista: units,
+      }
+    ]);
+
+    setShowMayoristaDialog(false);
+    setMayoristaProduct(null);
+    setMayoristaUnits("");
+    setMayoristaPrice("");
+  };
+
+  const removeFromCart = (productId: any) => {
     setCart(cart.filter(item => item.id !== productId));
   };
 
-  const updateQuantity = (productId: number, quantity: number) => {
+  const updateQuantity = (productId: any, quantity: number) => {
     if (quantity <= 0) {
       removeFromCart(productId);
     } else {
@@ -799,10 +875,14 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
 
     // Preparar detalle esperado por el backend
     const detalle = cart.map(item => ({
-      idproducto: item.id,
+      idproducto: item.productId ?? item.id,
       nombre: item.name ?? item.nombre ?? '',
-      precio: Number(item.price ?? item.precio ?? item.precio_unitario ?? 0),
-      cantidad: Number(item.quantity ?? item.cantidad ?? 1),
+      precio: item.isMayorista
+        ? Number((Number(item.price ?? 0) / Number(item.unitsPerMayorista ?? 1)) || 0)
+        : Number(item.price ?? item.precio ?? item.precio_unitario ?? 0),
+      cantidad: item.isMayorista
+        ? Number((Number(item.quantity ?? 1) * Number(item.unitsPerMayorista ?? 0)) || 0)
+        : Number(item.quantity ?? item.cantidad ?? 1),
     }));
 
     // Primero registrar la venta (sin detalle) en /registrar-venta
@@ -1059,6 +1139,21 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                         <Plus className="h-4 w-4 mr-1" />
                         Agregar
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openMayoristaDialog(product)}
+                        onMouseEnter={() => setHoveredMayoristaProductId(product.id)}
+                        onMouseLeave={() => setHoveredMayoristaProductId(null)}
+                        style={{
+                          borderColor: hoveredMayoristaProductId === product.id ? '#9AAD97' : '#D5B888',
+                          borderWidth: hoveredMayoristaProductId === product.id ? '2px' : '1px',
+                          color: hoveredProductId === product.id ? 'white' : '#D5B888',
+                          backgroundColor: 'transparent'
+                        }}
+                      >
+                        Mayorista
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -1109,9 +1204,18 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                   cart.map((item) => (
                     <div key={item.id} className="flex items-center gap-2 p-2 border rounded">
                       <div className="flex-1">
-                        <p className="text-sm">{item.name || ''}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm">{item.name || ''}</p>
+                          {item.isMayorista && (
+                            <Badge variant="outline" style={{ borderColor: '#D5B888', color: '#D5B888' }}>
+                              Mayorista
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground">
-                          S/ {(item.price || 0).toFixed(2)} c/u
+                          {item.isMayorista
+                            ? `S/ ${(item.price || 0).toFixed(2)} mayorista • ${item.unitsPerMayorista || 0} pastillas`
+                            : `S/ ${(item.price || 0).toFixed(2)} c/u`}
                         </p>
                       </div>
                       <Input
@@ -1537,6 +1641,65 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
               <Download className="h-4 w-4 mr-2" />
               Generar Excel
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showMayoristaDialog} onOpenChange={setShowMayoristaDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Venta Mayorista</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">
+                  {mayoristaProduct?.name ?? mayoristaProduct?.nombre ?? "Producto"}
+                </p>
+                {(() => {
+                  const info = mayoristaProduct ? getMayoristaPriceInfo(mayoristaProduct) : null;
+                  if (!info) return null;
+                  return (
+                    <p className="text-sm" style={{ color: '#9AAD97' }}>
+                      {info.label}: S/ {info.price.toFixed(2)}
+                    </p>
+                  );
+                })()}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Pastillas a descontar del inventario</Label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={mayoristaUnits}
+                onChange={(e) => setMayoristaUnits(e.target.value)}
+                placeholder="Ej: 10"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Precio mayorista (se suma al total)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={mayoristaPrice}
+                onChange={(e) => setMayoristaPrice(e.target.value)}
+                placeholder="Ej: 5.00"
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowMayoristaDialog(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={addMayoristaToCart} style={{ backgroundColor: '#D5B888', color: 'white', border: 'none' }}>
+                Agregar mayorista
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
