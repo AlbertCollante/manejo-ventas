@@ -76,7 +76,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       diferencia: diferenciaApi,
       observaciones: item.observaciones || '',
       ventasDelDia: [],
-      aperturaId: item.aperturaId,
+      aperturaId: item.aperturaId || item.id_apertura || '-',
     };
   };
 
@@ -442,10 +442,11 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     const detalleHeaderData = [
       ['DETALLE DE CIERRES DE CAJA'],
       [],
-      ['Fecha y Hora', 'Usuario', 'Efectivo (S/)', 'Yape (S/)', 'Tarjeta (S/)', 'Transferencia (S/)', 'Total (S/)', 'Diferencia (S/)'],
+      ['Nro Caja', 'Fecha y Hora', 'Usuario', 'Efectivo (S/)', 'Yape (S/)', 'Tarjeta (S/)', 'Transferencia (S/)', 'Total (S/)', 'Diferencia (S/)'],
     ];
 
     const detalleBodyData = cierresHistorico.map(c => [
+      c.aperturaId,
       c.fecha,
       c.usuario,
       c.montosContados.efectivo.toFixed(2),
@@ -458,7 +459,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
 
     const detalleData = [...detalleHeaderData, ...detalleBodyData];
     detalleData.push([]);
-    detalleData.push(['TOTALES', '', 
+    detalleData.push(['', 'TOTALES', '', 
       totalEfectivoHistorico.toFixed(2),
       totalYapeHistorico.toFixed(2),
       totalTarjetaHistorico.toFixed(2),
@@ -885,6 +886,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Nro Caja</TableHead>
                       <TableHead>Fecha y Hora</TableHead>
                       <TableHead>Usuario</TableHead>
                       <TableHead>Efectivo</TableHead>
@@ -900,6 +902,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                     {cierresHistorico.length > 0 ? (
                       cierresHistorico.map((cierre) => (
                         <TableRow key={cierre.id}>
+                          <TableCell className="font-bold" style={{ color: '#9AAD97' }}>{cierre.aperturaId}</TableCell>
                           <TableCell className="text-sm">{cierre.fecha}</TableCell>
                           <TableCell>{cierre.usuario}</TableCell>
                           <TableCell>S/ {cierre.montosContados.efectivo.toFixed(2)}</TableCell>
@@ -917,7 +920,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-4 text-muted-foreground">
+                        <TableCell colSpan={10} className="text-center py-4 text-muted-foreground">
                           No hay cierres registrados
                         </TableCell>
                       </TableRow>

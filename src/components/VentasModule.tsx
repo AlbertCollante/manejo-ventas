@@ -138,6 +138,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
             vuelto: Number(s.vuelto ?? 0),
             paymentMethod: s.metodo || s.paymentMethod || 'Efectivo',
             user: s.usuario || s.user || '',
+            id_apertura: s.id_apertura ?? null,
           };
         });
         setSales(normalized);
@@ -823,6 +824,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
 
     // Validar que la caja está abierta: consultar API /aperturas y fallback a dataService
     let todayOpening: any = null;
+    let idApertura: number | null = null;
     try {
       const respA = await fetch(`${API_BASE}/aperturas`);
       if (respA.ok) {
@@ -837,7 +839,10 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
           }
           return false;
         });
-        if (aperturaHoy) todayOpening = aperturaHoy;
+        if (aperturaHoy) {
+          todayOpening = aperturaHoy;
+          idApertura = aperturaHoy.id;
+        }
       }
     } catch (err) {
       console.error('Error consultando /aperturas:', err);
@@ -851,6 +856,12 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
         return;
       }
       todayOpening = localOpening;
+      idApertura = localOpening.id;
+    }
+
+    if (!idApertura) {
+      alert("❌ Error: No se pudo obtener el ID de la caja abierta.");
+      return;
     }
 
     if (!paymentMethod) {
@@ -898,6 +909,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                paymentMethod === 'tarjeta' ? 'Tarjeta' :
                paymentMethod === 'yape' ? 'Yape' : 'Transferencia',
       usuario: currentUser.name,
+      id_apertura: idApertura,
     };
 
     setLoadingSales(true);
@@ -931,7 +943,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       const detailResp = await fetch(`${API_BASE}/registrar-detalle-venta`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idventa, detalle })
+        body: JSON.stringify({ idventa, detalle, id_apertura: idApertura })
       });
 
       if (!detailResp.ok) {
@@ -964,9 +976,9 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
         const items = created.items && created.items.length > 0 ? created.items : null;
         if (!items) {
           const detail = await fetchSaleDetail(idventa);
-          saleToShow = { id: created.id ?? idventa, date: created.fecha ?? created.date, dateOnly: created.dateOnly || (created.fecha ? created.fecha.split('T')[0] : ''), customer: created.cliente, dni: created.dni, items: detail || cart, subtotal: Number(created.subtotal ?? 0), discount: Number(created.descuento ?? 0), total: Number(created.total ?? 0), paymentAmount: Number(created.pago ?? 0), vuelto: Number(created.vuelto ?? 0), paymentMethod: created.metodo || 'Efectivo', user: created.usuario || currentUser.name };
+          saleToShow = { id: created.id ?? idventa, date: created.fecha ?? created.date, dateOnly: created.dateOnly || (created.fecha ? created.fecha.split('T')[0] : ''), customer: created.cliente, dni: created.dni, items: detail || cart, subtotal: Number(created.subtotal ?? 0), discount: Number(created.descuento ?? 0), total: Number(created.total ?? 0), paymentAmount: Number(created.pago ?? 0), vuelto: Number(created.vuelto ?? 0), paymentMethod: created.metodo || 'Efectivo', user: created.usuario || currentUser.name, id_apertura: created.id_apertura || idApertura };
         } else {
-          saleToShow = { id: created.id ?? idventa, date: created.fecha ?? created.date, dateOnly: created.dateOnly || (created.fecha ? created.fecha.split('T')[0] : ''), customer: created.cliente, dni: created.dni, items: created.items, subtotal: Number(created.subtotal ?? 0), discount: Number(created.descuento ?? 0), total: Number(created.total ?? 0), paymentAmount: Number(created.pago ?? 0), vuelto: Number(created.vuelto ?? 0), paymentMethod: created.metodo || 'Efectivo', user: created.usuario || currentUser.name };
+          saleToShow = { id: created.id ?? idventa, date: created.fecha ?? created.date, dateOnly: created.dateOnly || (created.fecha ? created.fecha.split('T')[0] : ''), customer: created.cliente, dni: created.dni, items: created.items, subtotal: Number(created.subtotal ?? 0), discount: Number(created.descuento ?? 0), total: Number(created.total ?? 0), paymentAmount: Number(created.pago ?? 0), vuelto: Number(created.vuelto ?? 0), paymentMethod: created.metodo || 'Efectivo', user: created.usuario || currentUser.name, id_apertura: created.id_apertura || idApertura };
         }
       } else {
         saleToShow = { ...saleInfo, id: idventa, items: cart };
@@ -1024,6 +1036,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
 
     // Preparar datos para Excel
     const reportData = filteredSales.map(sale => ({
+      "Nro Caja": sale.id_apertura || '-',
       "ID Venta": sale.id,
       "Fecha": formatDateEsPE(sale.dateOnly),
       "Hora": getTime(sale.date),
@@ -1067,7 +1080,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     // Hoja 2: Detalle de ventas
     const ws2 = XLSX.utils.json_to_sheet(reportData);
     ws2["!cols"] = [
-      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 20 },
+      { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 20 },
       { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 12 },
       { wch: 12 }, { wch: 15 }, { wch: 15 }
     ];
@@ -1402,6 +1415,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
             <TableHeader>
               <TableRow>
                 <TableHead>ID Venta</TableHead>
+                <TableHead>Nro Caja</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Total</TableHead>
@@ -1418,6 +1432,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                   return displayedSales.map((sale) => (
                     <TableRow key={sale.id}>
                       <TableCell>{sale.id}</TableCell>
+                      <TableCell className="font-bold" style={{ color: '#9AAD97' }}>{sale.id_apertura || '-'}</TableCell>
                       <TableCell>{sale.date}</TableCell>
                       <TableCell>{sale.customer}</TableCell>
                       <TableCell>S/ {sale.total.toFixed(2)}</TableCell>

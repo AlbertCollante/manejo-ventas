@@ -96,6 +96,20 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
     setError(null);
 
     try {
+      // Verificar si ya existe una caja abierta
+      const aperturaResponse = await fetch('http://localhost:9000/aperturas');
+      if (aperturaResponse.ok) {
+        const aperturas = await aperturaResponse.json();
+        const cajaAbiertaExistente = aperturas.find((apertura: any) => apertura.estado === 'abierto');
+        
+        if (cajaAbiertaExistente) {
+          setError('Ya existe una caja abierta. Por favor, cierre la caja anterior antes de abrir una nueva.');
+          setLoading(false);
+          alert('❌ Error: Ya existe una caja abierta\n\nDebe cerrar la caja actual (Cierre de Caja) antes de abrir una nueva.');
+          return;
+        }
+      }
+
       const response = await fetch('http://localhost:9000/apertura-turno', {
         method: 'POST',
         headers: {
@@ -112,6 +126,8 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
 
       // Refetch aperturas después de la apertura
       await fetchAperturas();
+      setMontoInicial("");
+      setObservaciones("");
       alert(`Caja abierta exitosamente\nMonto inicial: S/ ${parseFloat(montoInicial).toFixed(2)}\nRegistrado en la base de datos`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
@@ -241,6 +257,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Nro Caja</TableHead>
                       <TableHead>Fecha y Hora</TableHead>
                       <TableHead>Usuario</TableHead>
                       <TableHead>Monto Inicial</TableHead>
@@ -251,6 +268,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
                   <TableBody>
                     {aperturas.slice().reverse().map((apertura) => (
                       <TableRow key={apertura.id}>
+                        <TableCell className="font-bold" style={{ color: '#9AAD97' }}>{apertura.id}</TableCell>
                         <TableCell className="text-sm">{apertura.fecha}</TableCell>
                         <TableCell>{apertura.usuario}</TableCell>
                         <TableCell>S/ {parseFloat(apertura.montoInicial).toFixed(2)}</TableCell>
