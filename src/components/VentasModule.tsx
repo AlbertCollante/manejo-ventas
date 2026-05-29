@@ -831,8 +831,10 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
         const aperturasData = await respA.json();
         const today = new Date().toISOString().split('T')[0];
         const aperturaHoy = aperturasData.find((a: any) => {
+          // Normalizar fecha: convertir "YYYY-MM-DD HH:MM:SS" a "YYYY-MM-DDTHH:MM:SS"
           const rawFecha = a.fecha || a.fecha_hora || new Date().toISOString();
-          const parsedDate = new Date(rawFecha);
+          const normalizedFecha = rawFecha.replace(' ', 'T');
+          const parsedDate = new Date(normalizedFecha);
           if (!isNaN(parsedDate.getTime())) {
             const formatted = parsedDate.toISOString().split('T')[0];
             return a.estado === 'abierto' && formatted === today;
