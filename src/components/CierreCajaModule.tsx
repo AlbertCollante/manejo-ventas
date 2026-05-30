@@ -257,7 +257,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     transferencia: ventasDelDia.filter(v => v.paymentMethod === "Transferencia").reduce((sum, v) => sum + v.total, 0),
   };
 
-  const totalEsperado = montoInicial + ventasPorMetodo.efectivo;
+  const totalEsperado = montoInicial + totalVentas;
   const totalContado = parseFloat(montoEfectivo || "0") + 
                        parseFloat(montoYape || "0") + 
                        parseFloat(montoTarjeta || "0") + 
