@@ -113,6 +113,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
   const [mayoristaUnits, setMayoristaUnits] = useState<string>("");
   const [mayoristaPrice, setMayoristaPrice] = useState<string>("");
   const [hoveredMayoristaProductId, setHoveredMayoristaProductId] = useState<number | null>(null);
+  const [openBoxId, setOpenBoxId] = useState<number | null>(null);
 
   const fetchSales = async () => {
     setLoadingSales(true);
@@ -223,7 +224,23 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       }
     };
 
+    const getOpenBox = async () => {
+      try {
+        const resp = await fetch(`${API_BASE}/aperturas`);
+        if (resp.ok) {
+          const data = await resp.json();
+          const openBox = data.find((a: any) => a.estado === 'abierto');
+          if (openBox) {
+            setOpenBoxId(openBox.id);
+          }
+        }
+      } catch (error) {
+        console.error('Error obteniendo caja abierta:', error);
+      }
+    };
+
     loadProducts();
+    getOpenBox();
     fetchSales();
     setAvailableCoupons(dataService.getCoupons());
     setSales(dataService.getSales());
@@ -1159,47 +1176,36 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               {(() => {
-                const displayedSales = currentUser.role && currentUser.role.toLowerCase() === 'vendedor'
+                let displayedSales = currentUser.role && currentUser.role.toLowerCase() === 'vendedor'
                   ? sales.filter(s => s.user === currentUser.name)
                   : sales;
+                
+                // Filtrar solo ventas de la caja abierta
+                if (openBoxId !== null) {
+                  displayedSales = displayedSales.filter(s => s.id_apertura === openBoxId);
+                }
                 
                 if (displayedSales.length === 0) {
                   return (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      No hay ventas registradas
+                      No hay ventas en esta caja
                     </p>
                   );
                 }
 
-                // Agrupar ventas por Nro de Caja
-                const ventasPorCaja = displayedSales.reduce((acc: any, sale: any) => {
-                  const nroCaja = sale.id_apertura || '-';
-                  if (!acc[nroCaja]) {
-                    acc[nroCaja] = {
-                      nroCaja,
-                      total: 0,
-                      cantidad: 0
-                    };
-                  }
-                  acc[nroCaja].total += sale.total;
-                  acc[nroCaja].cantidad += 1;
-                  return acc;
-                }, {});
-
-                const cajas = Object.values(ventasPorCaja) as Array<any>;
+                const totalVentas = displayedSales.length;
+                const totalMonto = displayedSales.reduce((sum: number, sale: any) => sum + sale.total, 0);
 
                 return (
                   <div className="space-y-3">
-                    {cajas.map((caja, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 border rounded-lg" style={{ borderColor: '#9AAD97' }}>
-                        <p className="text-sm font-semibold" style={{ color: '#9AAD97' }}>Caja {caja.nroCaja}</p>
-                        <p className="text-sm text-muted-foreground">{caja.cantidad} venta(s)</p>
-                      </div>
-                    ))}
-                    <div className="border-t pt-3 mt-3">
+                    <div className="flex items-center justify-between p-3 border rounded-lg" style={{ borderColor: '#9AAD97' }}>
+                      <p className="text-sm font-semibold" style={{ color: '#9AAD97' }}>Caja {openBoxId || '-'}</p>
+                      <p className="text-sm text-muted-foreground">{totalVentas} venta(s)</p>
+                    </div>
+                    <div className="border-t pt-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold" style={{ color: '#9AAD97' }}>Total General</p>
-                        <p className="text-lg font-bold" style={{ color: '#D5B888' }}>S/ {displayedSales.reduce((sum: number, sale: any) => sum + sale.total, 0).toFixed(2)}</p>
+                        <p className="text-sm font-semibold" style={{ color: '#9AAD97' }}>Total</p>
+                        <p className="text-lg font-bold" style={{ color: '#D5B888' }}>S/ {totalMonto.toFixed(2)}</p>
                       </div>
                     </div>
                   </div>
