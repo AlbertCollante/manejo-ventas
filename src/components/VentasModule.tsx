@@ -855,7 +855,6 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       alert("Por favor ingrese el dinero recibido");
       return;
     }
-
     if (paymentMethod === 'efectivo' && payAmount < total) {
       alert(`Dinero insuficiente. Total: S/ ${total.toFixed(2)}`);
       return;
@@ -1151,6 +1150,61 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card style={{ borderTop: '4px solid #9AAD97' }}>
+            <CardHeader>
+              <CardTitle style={{ color: '#9AAD97' }}>Resumen de Ventas</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {(() => {
+                const displayedSales = currentUser.role && currentUser.role.toLowerCase() === 'vendedor'
+                  ? sales.filter(s => s.user === currentUser.name)
+                  : sales;
+                
+                if (displayedSales.length === 0) {
+                  return (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No hay ventas registradas
+                    </p>
+                  );
+                }
+
+                // Agrupar ventas por Nro de Caja
+                const ventasPorCaja = displayedSales.reduce((acc: any, sale: any) => {
+                  const nroCaja = sale.id_apertura || '-';
+                  if (!acc[nroCaja]) {
+                    acc[nroCaja] = {
+                      nroCaja,
+                      total: 0,
+                      cantidad: 0
+                    };
+                  }
+                  acc[nroCaja].total += sale.total;
+                  acc[nroCaja].cantidad += 1;
+                  return acc;
+                }, {});
+
+                const cajas = Object.values(ventasPorCaja) as Array<any>;
+
+                return (
+                  <div className="space-y-3">
+                    {cajas.map((caja, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 border rounded-lg" style={{ borderColor: '#9AAD97' }}>
+                        <p className="text-sm font-semibold" style={{ color: '#9AAD97' }}>Caja {caja.nroCaja}</p>
+                        <p className="text-sm text-muted-foreground">{caja.cantidad} venta(s)</p>
+                      </div>
+                    ))}
+                    <div className="border-t pt-3 mt-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold" style={{ color: '#9AAD97' }}>Total General</p>
+                        <p className="text-lg font-bold" style={{ color: '#D5B888' }}>S/ {displayedSales.reduce((sum: number, sale: any) => sum + sale.total, 0).toFixed(2)}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>
