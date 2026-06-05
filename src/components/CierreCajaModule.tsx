@@ -258,10 +258,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   };
 
   const totalEsperado = montoInicial + totalVentas;
-  const totalContado = parseFloat(montoEfectivo || "0") + 
-                       parseFloat(montoYape || "0") + 
-                       parseFloat(montoTarjeta || "0") + 
-                       parseFloat(montoTransferencia || "0");
+  // El Total Contado NO incluye Yape (es un pago digital, no efectivo físico)
+  const totalContado = parseFloat(montoEfectivo || "0") ;
   const diferencia = totalContado - totalEsperado;
 
   const handleCerrarCaja = async () => {
