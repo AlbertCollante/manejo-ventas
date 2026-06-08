@@ -44,7 +44,7 @@ export default function App() {
   const allMenuItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["Administrador"] },
     { id: "ventas", label: "Ventas", icon: ShoppingCart, roles: ["Administrador", "Vendedor"] },
-    { id: "servicios", label: "Servicios", icon: Activity, roles: ["Administrador"] },
+    { id: "servicios", label: "Servicios", icon: Activity, roles: ["Administrador", "Vendedor"] },
     { id: "inventario", label: "Inventario", icon: Package, roles: ["Administrador"] },
     { id: "contabilidad", label: "Contabilidad", icon: DollarSign, roles: ["Administrador"] },
     { id: "usuarios", label: "Usuarios", icon: Users, roles: ["Administrador"] },
@@ -78,7 +78,7 @@ export default function App() {
       case "ventas":
         return currentUser ? <VentasModule currentUser={currentUser} /> : null;
       case "servicios":
-        return <ServiciosModule />;
+        return currentUser ? <ServiciosModule currentUser={currentUser} /> : null;
       case "inventario":
         return <InventarioModule />;
       case "contabilidad":

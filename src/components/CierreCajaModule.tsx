@@ -35,6 +35,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const [cierresHistorico, setCierresHistorico] = useState<CierreCaja[]>([]);
   const [allCierres, setAllCierres] = useState<CierreCaja[]>([]);
   const [ventasDelDia, setVentasDelDia] = useState<any[]>([]);
+  const [serviciosDelDia, setServiciosDelDia] = useState<any[]>([]);
   const [montoInicial, setMontoInicial] = useState<number>(0);
   const [aperturaDelDia, setAperturaDelDia] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -138,6 +139,62 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       vuelto: Number(sale.vuelto ?? 0),
       paymentMethod,
       user: sale.usuario ?? sale.user ?? 'caja1',
+      type: 'venta'
+    };
+  };
+
+  const normalizeApiService = (service: any) => {
+    const subtotal = Number(service.subtotal ?? 0);
+    
+    // Normalizar método de pago
+    let paymentMethod = String(service.metodo ?? 'Efectivo');
+    const pm = paymentMethod.toLowerCase();
+    if (pm.includes('efect')) paymentMethod = 'Efectivo';
+    else if (pm.includes('tarj')) paymentMethod = 'Tarjeta';
+    else if (pm.includes('yape')) paymentMethod = 'Yape';
+    else if (pm.includes('trans')) paymentMethod = 'Transferencia';
+    else paymentMethod = paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1);
+
+    // Parsear fecha
+    const raw = service.hora ?? service.fecha ?? new Date().toISOString();
+    let serviceDateObj = new Date(raw);
+    if (isNaN(serviceDateObj.getTime())) {
+      try {
+        const [datePart, timePart] = String(raw).split(' ');
+        const [day, month, year] = (datePart ?? '').split('/');
+        const [hour = '00', minute = '00', second = '00'] = (timePart ?? '').split(':');
+        if (day && month && year) {
+          serviceDateObj = new Date(
+            parseInt(year, 10),
+            parseInt(month, 10) - 1,
+            parseInt(day, 10),
+            parseInt(hour, 10) || 0,
+            parseInt(minute, 10) || 0,
+            parseInt(second, 10) || 0
+          );
+        }
+      } catch (e) {
+        serviceDateObj = new Date();
+      }
+    }
+
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const dateFormatted = `${pad(serviceDateObj.getDate())}/${pad(serviceDateObj.getMonth() + 1)}/${serviceDateObj.getFullYear()} ${pad(serviceDateObj.getHours())}:${pad(serviceDateObj.getMinutes())}:${pad(serviceDateObj.getSeconds())}`;
+
+    return {
+      id: service.idserviciodado ?? `SRV-${Math.random().toString().slice(2, 6)}`,
+      date: dateFormatted,
+      dateObj: serviceDateObj,
+      dateOnly: serviceDateObj.toISOString().split('T')[0],
+      vendor: service.vendedor ?? 'Sin especificar',
+      description: service.descripcion ?? 'Servicio',
+      subtotal,
+      paymentAmount: Number(service.pago ?? subtotal),
+      vuelto: Number(service.vuelto ?? 0),
+      paymentMethod,
+      user: service.usuario ?? 'caja1',
+      type: 'servicio',
+      idapertura: service.idapertura ?? service.id_apertura ?? null
     };
   };
 
@@ -172,9 +229,6 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
         }
       }
 
-      //console.log('Apertura date:', aperturaDate);
-      //console.log('Total ventas en API:', normalizedSales.length);
-
       // Filtrar ventas que ocurrieron desde la apertura hasta ahora
       const ventasDesdeApertura = normalizedSales.filter(sale => {
         const saleDateObj = sale.dateObj instanceof Date ? sale.dateObj : new Date(sale.date);
@@ -182,11 +236,55 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
         return saleDateObj >= aperturaDate;
       }).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
 
-      //console.log('Ventas desde apertura:', ventasDesdeApertura.length);
       setVentasDelDia(ventasDesdeApertura);
     } catch (err) {
       console.error('Error cargando ventas:', err);
       setVentasDelDia([]);
+    }
+  };
+
+  const fetchServiciosDelDia = async (aperturaTime: string, aperturaId: number) => {
+    try {
+      const resp = await fetch(`${API_BASE}/servicios`);
+      if (!resp.ok) throw new Error('Error al obtener servicios de la API');
+      
+      const data = await resp.json();
+      const allServices = Array.isArray(data) ? data : [];
+      
+      // Normalizar servicios
+      const normalizedServices = allServices.map(normalizeApiService);
+
+      // Convertir fecha de apertura a objeto Date
+      let aperturaDate = new Date(aperturaTime);
+      if (isNaN(aperturaDate.getTime())) {
+        try {
+          const [datePart, timePart] = String(aperturaTime).split(' ');
+          const [day, month, year] = (datePart ?? '').split('/');
+          const [hour = '0', minute = '0', second = '0'] = (timePart ?? '').split(':');
+          aperturaDate = new Date(
+            parseInt(year, 10),
+            parseInt(month, 10) - 1,
+            parseInt(day, 10),
+            parseInt(hour, 10) || 0,
+            parseInt(minute, 10) || 0,
+            parseInt(second, 10) || 0
+          );
+        } catch (e) {
+          aperturaDate = new Date();
+        }
+      }
+
+      // Filtrar servicios de la apertura actual
+      const serviciosDesdeApertura = normalizedServices.filter(service => {
+        const serviceDateObj = service.dateObj instanceof Date ? service.dateObj : new Date(service.date);
+        if (!serviceDateObj || isNaN(serviceDateObj.getTime())) return false;
+        return serviceDateObj >= aperturaDate && service.idapertura === aperturaId;
+      }).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+
+      setServiciosDelDia(serviciosDesdeApertura);
+    } catch (err) {
+      console.error('Error cargando servicios:', err);
+      setServiciosDelDia([]);
     }
   };
 
@@ -228,16 +326,20 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
 
         // Cargar ventas desde la API después de la apertura
         await fetchVentasDelDia(rawFecha);
+        // Cargar servicios desde la API después de la apertura
+        await fetchServiciosDelDia(rawFecha, openApertura.id);
       } else {
         setAperturaDelDia(null);
         setMontoInicial(0);
         setVentasDelDia([]);
+        setServiciosDelDia([]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
       setAperturaDelDia(null);
       setMontoInicial(0);
       setVentasDelDia([]);
+      setServiciosDelDia([]);
     }
   };
 
@@ -247,17 +349,32 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     fetchOpenApertura();
   }, []);
 
-  // Cálculos basados en ventas reales
+  // Cálculos basados en ventas y servicios reales
   const totalVentas = ventasDelDia.reduce((sum, v) => sum + v.total, 0);
+  const totalServicios = serviciosDelDia.reduce((sum, s) => sum + s.subtotal, 0);
+  const totalIngresos = totalVentas + totalServicios;
   
-  const ventasPorMetodo = {
-    efectivo: ventasDelDia.filter(v => v.paymentMethod === "Efectivo").reduce((sum, v) => sum + v.total, 0),
-    yape: ventasDelDia.filter(v => v.paymentMethod === "Yape").reduce((sum, v) => sum + v.total, 0),
-    tarjeta: ventasDelDia.filter(v => v.paymentMethod === "Tarjeta").reduce((sum, v) => sum + v.total, 0),
-    transferencia: ventasDelDia.filter(v => v.paymentMethod === "Transferencia").reduce((sum, v) => sum + v.total, 0),
+  // Ingresos por método de pago (ventas + servicios)
+  const ingresosPorMetodo = {
+    efectivo: (
+      ventasDelDia.filter(v => v.paymentMethod === "Efectivo").reduce((sum, v) => sum + v.total, 0) +
+      serviciosDelDia.filter(s => s.paymentMethod === "Efectivo").reduce((sum, s) => sum + s.subtotal, 0)
+    ),
+    yape: (
+      ventasDelDia.filter(v => v.paymentMethod === "Yape").reduce((sum, v) => sum + v.total, 0) +
+      serviciosDelDia.filter(s => s.paymentMethod === "Yape").reduce((sum, s) => sum + s.subtotal, 0)
+    ),
+    tarjeta: (
+      ventasDelDia.filter(v => v.paymentMethod === "Tarjeta").reduce((sum, v) => sum + v.total, 0) +
+      serviciosDelDia.filter(s => s.paymentMethod === "Tarjeta").reduce((sum, s) => sum + s.subtotal, 0)
+    ),
+    transferencia: (
+      ventasDelDia.filter(v => v.paymentMethod === "Transferencia").reduce((sum, v) => sum + v.total, 0) +
+      serviciosDelDia.filter(s => s.paymentMethod === "Transferencia").reduce((sum, s) => sum + s.subtotal, 0)
+    ),
   };
 
-  const totalEsperado = montoInicial + totalVentas;
+  const totalEsperado = montoInicial + totalIngresos;
   const totalContado = parseFloat(montoEfectivo || "0") + 
                        parseFloat(montoYape || "0") + 
                        parseFloat(montoTarjeta || "0") + 
@@ -317,7 +434,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       await fetchCashClosures();
       await fetchOpenApertura();
       setCajaCerrada(true);
-      alert(`Caja cerrada exitosamente\nTotal contado: S/ ${totalContado.toFixed(2)}\nDiferencia: S/ ${diferencia.toFixed(2)}\n\nCierre registrado en la base de datos`);
+      alert(`Caja cerrada exitosamente\nVentas: ${ventasDelDia.length} | Servicios: ${serviciosDelDia.length}\nTotal Ventas: S/ ${totalVentas.toFixed(2)}\nTotal Servicios: S/ ${totalServicios.toFixed(2)}\nTotal Ingresos: S/ ${totalIngresos.toFixed(2)}\nTotal contado: S/ ${totalContado.toFixed(2)}\nDiferencia: S/ ${diferencia.toFixed(2)}\n\nCierre registrado en la base de datos`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -331,10 +448,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       return;
     }
 
-    // Función simulada - en producción sería un llamado a backend
-    //console.log("Enviando reporte a:", email);
-    //console.log("Datos de ventas:", ventasDelDia);
-    alert(`Reporte de cierre enviado a: ${email}\nTotal de ventas: S/ ${totalVentas.toFixed(2)}`);
+    alert(`Reporte de cierre enviado a: ${email}\nVentas: ${ventasDelDia.length}\nServicios: ${serviciosDelDia.length}\nTotal Ingresos: S/ ${totalIngresos.toFixed(2)}`);
   };
 
   const generarPDFReporte = () => {
@@ -357,6 +471,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       ['Concepto', 'Monto (S/)'],
       ['Monto Inicial', montoInicial.toFixed(2)],
       ['Total Ventas', totalVentas.toFixed(2)],
+      ['Total Servicios', totalServicios.toFixed(2)],
+      ['Total Ingresos', totalIngresos.toFixed(2)],
       ['Total Esperado', totalEsperado.toFixed(2)],
       [],
       ['EFECTIVO CONTADO POR MÉTODO'],
@@ -398,14 +514,40 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
 
     const ventasData = [...ventasHeaderData, ...ventasBodyData];
     ventasData.push([], ['TOTALES POR MÉTODO']);
-    ventasData.push(['Efectivo', '', '', '', ventasPorMetodo.efectivo.toFixed(2)]);
-    ventasData.push(['Yape', '', '', '', ventasPorMetodo.yape.toFixed(2)]);
-    ventasData.push(['Tarjeta', '', '', '', ventasPorMetodo.tarjeta.toFixed(2)]);
-    ventasData.push(['Transferencia', '', '', '', ventasPorMetodo.transferencia.toFixed(2)]);
-    ventasData.push(['TOTAL', '', '', '', totalVentas.toFixed(2)]);
+    ventasData.push(['Efectivo', '', '', '', ingresosPorMetodo.efectivo.toFixed(2)]);
+    ventasData.push(['Yape', '', '', '', ingresosPorMetodo.yape.toFixed(2)]);
+    ventasData.push(['Tarjeta', '', '', '', ingresosPorMetodo.tarjeta.toFixed(2)]);
+    ventasData.push(['Transferencia', '', '', '', ingresosPorMetodo.transferencia.toFixed(2)]);
+    ventasData.push(['TOTAL', '', '', '', totalIngresos.toFixed(2)]);
 
     const wsVentas = XLSX.utils.aoa_to_sheet(ventasData);
-    XLSX.utils.book_append_sheet(wb, wsVentas, "Ventas");
+    XLSX.utils.book_append_sheet(wb, wsVentas, "Ventas y Servicios");
+
+    // Hoja 3: Detalle de servicios
+    const serviciosHeaderData = [
+      ['DETALLE DE SERVICIOS DEL DÍA'],
+      [],
+      ['ID', 'Hora', 'Vendedor', 'Descripción', 'Método de Pago', 'Monto (S/)'],
+    ];
+    
+    const serviciosBodyData = serviciosDelDia.map(s => {
+      // Extraer hora de la fecha
+      const [, hora] = s.date.split(' ');
+      return [
+        s.id,
+        hora || 'N/A',
+        s.vendor,
+        s.description,
+        s.paymentMethod,
+        s.subtotal.toFixed(2)
+      ];
+    });
+
+    const serviciosData = [...serviciosHeaderData, ...serviciosBodyData];
+    serviciosData.push([], ['TOTAL SERVICIOS', '', '', '', '', totalServicios.toFixed(2)]);
+
+    const wsServicios = XLSX.utils.aoa_to_sheet(serviciosData);
+    XLSX.utils.book_append_sheet(wb, wsServicios, "Servicios");
 
     // Generar archivo
     const nombreArchivo = `Cierre_Caja_${new Date().toISOString().split('T')[0]}_${new Date().getHours()}${new Date().getMinutes()}.xlsx`;
@@ -637,19 +779,19 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between p-3 border-l-4 border-green-500 bg-green-50 rounded-lg">
                     <span>Efectivo</span>
-                    <span>S/ {ventasPorMetodo.efectivo.toFixed(2)}</span>
+                    <span>S/ {ingresosPorMetodo.efectivo.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-l-4 border-purple-500 bg-purple-50 rounded-lg">
                     <span>Yape</span>
-                    <span>S/ {ventasPorMetodo.yape.toFixed(2)}</span>
+                    <span>S/ {ingresosPorMetodo.yape.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-l-4 border-cyan-500 bg-cyan-50 rounded-lg">
                     <span>Tarjeta</span>
-                    <span>S/ {ventasPorMetodo.tarjeta.toFixed(2)}</span>
+                    <span>S/ {ingresosPorMetodo.tarjeta.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-l-4 border-blue-500 bg-blue-50 rounded-lg">
                     <span>Transferencia</span>
-                    <span>S/ {ventasPorMetodo.transferencia.toFixed(2)}</span>
+                    <span>S/ {ingresosPorMetodo.transferencia.toFixed(2)}</span>
                   </div>
                 </div>
               </CardContent>
@@ -682,7 +824,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                           />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Esperado: S/ {(montoInicial + ventasPorMetodo.efectivo).toFixed(2)}
+                          Esperado: S/ {(montoInicial + ingresosPorMetodo.efectivo).toFixed(2)}
                         </p>
                       </div>
 
@@ -702,7 +844,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                           />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Esperado: S/ {ventasPorMetodo.yape.toFixed(2)}
+                          Esperado: S/ {ingresosPorMetodo.yape.toFixed(2)}
                         </p>
                       </div>
 
@@ -722,7 +864,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                           />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Esperado: S/ {ventasPorMetodo.tarjeta.toFixed(2)}
+                          Esperado: S/ {ingresosPorMetodo.tarjeta.toFixed(2)}
                         </p>
                       </div>
 
@@ -742,7 +884,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                           />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Esperado: S/ {ventasPorMetodo.transferencia.toFixed(2)}
+                          Esperado: S/ {ingresosPorMetodo.transferencia.toFixed(2)}
                         </p>
                       </div>
 
@@ -845,6 +987,55 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                     <TableRow>
                       <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
                         No hay ventas registradas para hoy
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Detalle de Servicios del Día</CardTitle>
+              {serviciosDelDia.length === 0 && (
+                <p className="text-sm text-muted-foreground">No hay servicios registrados para hoy</p>
+              )}
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID Servicio</TableHead>
+                    <TableHead>Hora</TableHead>
+                    <TableHead>Vendedor</TableHead>
+                    <TableHead>Descripción</TableHead>
+                    <TableHead>Método de Pago</TableHead>
+                    <TableHead>Monto</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {serviciosDelDia.length > 0 ? (
+                    serviciosDelDia.map((servicio) => {
+                      // Extraer hora de la fecha
+                      const [, hora] = servicio.date.split(' ');
+                      return (
+                        <TableRow key={servicio.id}>
+                          <TableCell>{servicio.id}</TableCell>
+                          <TableCell>{hora || 'N/A'}</TableCell>
+                          <TableCell>{servicio.vendor}</TableCell>
+                          <TableCell>{servicio.description}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{servicio.paymentMethod}</Badge>
+                          </TableCell>
+                          <TableCell>S/ {servicio.subtotal.toFixed(2)}</TableCell>
+                        </TableRow>
+                      );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
+                        No hay servicios registrados para hoy
                       </TableCell>
                     </TableRow>
                   )}
