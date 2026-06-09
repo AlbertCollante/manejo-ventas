@@ -344,6 +344,8 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
       setMaterialsCart([]);
       setSelectedService("");
       setManualServiceCost("");
+      setCustomerName("");
+      setCustomerDni("");
       loadProducts();
       getOpenBox();
     } else {
@@ -416,11 +418,11 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
         body: JSON.stringify({
           idservicio: Number(selectedService),
           subtotal: cost,
-          vendedor: customerName.trim(),
+          vendedor: currentUser.name || currentUser.username,
           pago: payAmount,
           vuelto: paymentMethod === 'efectivo' ? payAmount - cost : 0,
           metodo,
-          usuario: currentUser.name || currentUser.username,
+          usuario: customerName.trim() || "Cliente General",
           idapertura: activeBoxId
         })
       });
@@ -453,8 +455,8 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
       setLastServiceData({
         idserviciodado,
         hora: new Date().toLocaleString('es-PE'),
-        cliente: customerName,
-        dni: customerDni,
+        cliente: customerName || "Cliente General",
+        dni: customerDni || "-",
         servicio: service?.descripcion || 'Servicio',
         duracion: service?.duracion || '',
         subtotal: cost,
@@ -914,139 +916,36 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                 {/* Materiales Utilizados */}
                 <div className="border-b pb-4">
                   <h3 style={{ color: '#9AAD97' }} className="font-semibold mb-2">Materiales Utilizados</h3>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Busque productos del inventario y agréguelos como materiales del servicio.
-                  </p>
-                  <div className="relative mb-3">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar por nombre, código o marca..."
-                      value={searchProduct}
-                      onChange={(e) => setSearchProduct(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-
-                  {searchProduct.trim().length >= 2 && (
-                    <div className="space-y-2 max-h-[220px] overflow-y-auto mb-3">
-                    {filteredProducts.length === 0 ? (
-                      <div className="text-center py-6 text-sm text-muted-foreground border rounded-lg">
-                        {products.length === 0
-                          ? 'No hay productos cargados del inventario'
-                          : 'No se encontraron productos con ese criterio'}
-                      </div>
-                    ) : (
-                      filteredProducts.map((product) => {
-                        const inCartQty = getCartQuantity(product.idproducto);
-                        const available = Math.max(0, Number(product.stock ?? 0) - inCartQty);
-                        const outOfStock = Number(product.stock ?? 0) <= 0;
-
-                        return (
-                          <div
-                            key={product.idproducto}
-                            onMouseEnter={() => setHoveredProductId(product.idproducto)}
-                            onMouseLeave={() => setHoveredProductId(null)}
-                            className="flex items-center justify-between p-3 border rounded-lg transition-all"
-                            style={{
-                              backgroundColor: hoveredProductId === product.idproducto ? '#9AAD97' : 'transparent',
-                              color: hoveredProductId === product.idproducto ? 'white' : 'inherit',
-                              borderColor: hoveredProductId === product.idproducto ? '#9AAD97' : 'inherit',
-                              opacity: outOfStock ? 0.6 : 1
-                            }}
-                          >
-                            <div className="flex-1 min-w-0 pr-3">
-                              <p className="text-sm font-medium truncate">
-                                {product.nombre || product.name}
-                              </p>
-                              <p
-                                className="text-xs"
-                                style={{
-                                  color: hoveredProductId === product.idproducto
-                                    ? 'rgba(255,255,255,0.85)'
-                                    : '#999'
-                                }}
-                              >
-                                Código: {product.codigo || product.code} | Stock: {product.stock}
-                                {product.estante || product.shelf ? ` | Estante: ${product.estante || product.shelf}` : ''}
-                                {inCartQty > 0 ? ` | En carrito: ${inCartQty}` : ''}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <p
-                                className="text-sm font-bold"
-                                style={{
-                                  color: hoveredProductId === product.idproducto ? 'white' : '#D5B888'
-                                }}
-                              >
-                                S/ {(product.precio_unitario || 0).toFixed(2)}
-                              </p>
-                              <Button
-                                size="sm"
-                                disabled={available <= 0}
-                                onClick={() => addMaterialToCart(product)}
-                                style={{
-                                  backgroundColor: '#D5B888',
-                                  color: 'white',
-                                  border: 'none'
-                                }}
-                              >
-                                <Plus className="h-4 w-4 mr-1" />
-                                Agregar
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-
-                  </div>
-                  )}
-
-                  {materialsCart.length > 0 && (
-                    <div className="rounded-lg border p-3 space-y-2" style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}>
-                      <p className="text-sm font-semibold" style={{ color: '#9AAD97' }}>
-                        Materiales seleccionados ({materialsCart.length})
-                      </p>
+                  {selectedService && materialsCart.length > 0 && (
+                    <div className="rounded-lg border p-3 space-y-2 mb-3" style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}>
+                      <p className="text-xs text-muted-foreground mb-2">Materiales fijos del servicio:</p>
                       {materialsCart.map((item) => (
                         <div key={item.idproducto} className="flex items-center gap-2 p-2 bg-white border rounded">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{item.nombre}</p>
                             <p className="text-xs text-muted-foreground">
-                              S/ {(item.precio || 0).toFixed(2)} c/u • Stock disp.: {getProductStock(item.idproducto)}
+                              S/ {(item.precio || 0).toFixed(2)} c/u
                             </p>
                           </div>
-                          <Input
-                            type="number"
-                            min="1"
-                            max={getProductStock(item.idproducto)}
-                            value={item.cantidad || 1}
-                            onChange={(e) => updateMaterialQuantity(item.idproducto, parseInt(e.target.value) || 1)}
-                            className="w-16 h-8 text-center"
-                          />
                           <p className="text-sm font-semibold w-20 text-right" style={{ color: '#D5B888' }}>
                             S/ {((item.precio || 0) * (item.cantidad || 0)).toFixed(2)}
                           </p>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => removeMaterialFromCart(item.idproducto)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
                         </div>
                       ))}
                     </div>
                   )}
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {selectedService ? 'Este servicio incluye los materiales mostrados arriba.' : 'Seleccione un servicio para ver los materiales fijos.'}
+                  </p>
                 </div>
 
                 {/* Costo del Servicio */}
                 <div className="border-b pb-4">
                   <h3 style={{ color: '#9AAD97' }} className="font-semibold mb-2">Costo del Servicio</h3>
-                  {selectedService && (
-                    <div className="space-y-2">
-                      {materialsCart.length > 0 && (
-                        <div className="rounded-lg border p-3" style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}>
-                          <p className="text-xs text-muted-foreground mb-2">Desglose del costo:</p>
+                  {selectedService && manualServiceCost && (
+                    <div className="rounded-lg border p-3" style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}>
+                      {materialsCart.length > 0 ? (
+                        <>
                           <div className="flex justify-between text-sm">
                             <span>Precio de aplicación:</span>
                             <span style={{ color: '#9AAD97' }}>S/ {Number(selectedServicePrice || 0).toFixed(2)}</span>
@@ -1058,22 +957,18 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                           <div className="flex justify-between items-center pt-2 mt-2 border-t" style={{ backgroundColor: 'rgba(154, 173, 151, 0.15)' }}>
                             <span className="font-semibold" style={{ color: '#9AAD97' }}>TOTAL:</span>
                             <span className="font-bold text-lg" style={{ color: '#D5B888' }}>
-                              S/ {manualServiceCost || '0.00'}
+                              S/ {manualServiceCost}
                             </span>
                           </div>
-                        </div>
-                      )}
-                      {materialsCart.length === 0 && (
-                        <div className="flex justify-between items-center p-3 rounded-lg border" style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}>
-                          <span className="font-semibold" style={{ color: '#9AAD97' }}>Precio de aplicación:</span>
+                        </>
+                      ) : (
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold" style={{ color: '#9AAD97' }}>Precio total:</span>
                           <span className="font-bold text-lg" style={{ color: '#D5B888' }}>
-                            S/ {manualServiceCost || '0.00'}
+                            S/ {manualServiceCost}
                           </span>
                         </div>
                       )}
-                      <p className="text-xs text-muted-foreground mt-2">
-                        El costo total se calcula automáticamente según los productos seleccionados y el precio de aplicación del servicio.
-                      </p>
                     </div>
                   )}
                   {!selectedService && (
@@ -1182,6 +1077,44 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
         </div>
       )}
 
+      {/* Grid de Servicios Disponibles */}
+      <Card style={{ borderTop: '4px solid #9AAD97' }}>
+        <CardHeader>
+          <CardTitle style={{ color: '#9AAD97' }}>Servicios Disponibles</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {availableServices.length === 0 ? (
+            <p className="text-muted-foreground text-center py-4">No hay servicios registrados.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {availableServices.map((service) => (
+                <div
+                  key={service.idservicio}
+                  className="border rounded-lg p-4 hover:shadow-md transition-all cursor-pointer"
+                  style={{ borderColor: '#D5B888', backgroundColor: 'rgba(154, 173, 151, 0.05)' }}
+                >
+                  <div className="flex flex-col h-full">
+                    <h4 className="font-semibold text-sm mb-2" style={{ color: '#9AAD97' }}>
+                      {service.descripcion}
+                    </h4>
+                    {service.duracion && (
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Duración: {service.duracion}
+                      </p>
+                    )}
+                    <div className="mt-auto pt-2 border-t">
+                      <p className="text-lg font-bold" style={{ color: '#D5B888' }}>
+                        S/ {(Number(service.precio) || 0).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Tabla de Servicios Registrados */}
       <Card style={{ borderTop: '4px solid #D5B888' }}>
         <CardHeader>
@@ -1193,10 +1126,11 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
               <TableRow style={{ backgroundColor: 'rgba(213, 184, 136, 0.1)' }}>
                 <TableHead style={{ color: '#D5B888', fontWeight: 'bold' }}>ID</TableHead>
                 <TableHead style={{ color: '#9AAD97', fontWeight: 'bold' }}>Vendedor</TableHead>
-                <TableHead style={{ color: '#D5B888', fontWeight: 'bold' }}>Servicio</TableHead>
-                <TableHead style={{ color: '#9AAD97', fontWeight: 'bold' }}>Monto (S/)</TableHead>
-                <TableHead style={{ color: '#D5B888', fontWeight: 'bold' }}>Método</TableHead>
-                <TableHead style={{ color: '#9AAD97', fontWeight: 'bold' }}>Hora</TableHead>
+                <TableHead style={{ color: '#D5B888', fontWeight: 'bold' }}>Cliente</TableHead>
+                <TableHead style={{ color: '#9AAD97', fontWeight: 'bold' }}>Servicio</TableHead>
+                <TableHead style={{ color: '#D5B888', fontWeight: 'bold' }}>Monto (S/)</TableHead>
+                <TableHead style={{ color: '#9AAD97', fontWeight: 'bold' }}>Método</TableHead>
+                <TableHead style={{ color: '#D5B888', fontWeight: 'bold' }}>Hora</TableHead>
                 <TableHead style={{ color: '#D5B888', fontWeight: 'bold' }}>Acción</TableHead>
               </TableRow>
             </TableHeader>
@@ -1205,6 +1139,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                 <TableRow key={service.idserviciodado}>
                   <TableCell className="font-semibold">{service.idserviciodado}</TableCell>
                   <TableCell>{service.vendedor}</TableCell>
+                  <TableCell>{service.usuario || 'Cliente General'}</TableCell>
                   <TableCell>{service.descripcion}</TableCell>
                   <TableCell style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {service.subtotal.toFixed(2)}</TableCell>
                   <TableCell>
