@@ -58,6 +58,9 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
     precio: "",
     duracion: ""
   });
+  const [newServiceProducts, setNewServiceProducts] = useState<any[]>([]);
+  const [newServiceSearchProduct, setNewServiceSearchProduct] = useState("");
+  const [newServiceHoveredProduct, setNewServiceHoveredProduct] = useState<number | null>(null);
 
   // Cargar productos del inventario
   const loadProducts = async () => {
@@ -96,12 +99,29 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
       if (!response.ok) throw new Error('Error al obtener servicios');
       const data = await response.json();
       if (Array.isArray(data)) {
-        const normalized = data.map((s: any) => ({
-          idservicio: Number(s.idservicio ?? 0),
-          descripcion: s.descripcion ?? '',
-          precio: Number(s.precio ?? 0),
-          duracion: s.duracion ?? ''
-        }));
+        const normalized = data.map((s: any) => {
+          let productos = [];
+          try {
+            if (s.productos) {
+              if (typeof s.productos === 'string') {
+                productos = JSON.parse(s.productos);
+              } else if (Array.isArray(s.productos)) {
+                productos = s.productos;
+              }
+            }
+          } catch (e) {
+            productos = [];
+          }
+          return {
+            idservicio: Number(s.idservicio ?? 0),
+            descripcion: s.descripcion ?? '',
+            precio: Number(s.precio ?? 0),
+            precio_de_aplicacion: Number(s.precio_de_aplicacion ?? s.precio ?? 0),
+            duracion: s.duracion ?? '',
+            productos: productos,
+            total: Number(s.total ?? 0)
+          };
+        });
         setAvailableServices(normalized);
       }
     } catch (err) {
@@ -236,6 +256,32 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
     setSearchProduct("");
   };
 
+  // Agregar producto al carrito de nuevo servicio
+  const addProductToNewService = (product: any) => {
+    const existing = newServiceProducts.find(p => p.idproducto === product.idproducto);
+    if (existing) {
+      setNewServiceProducts(newServiceProducts.map(p =>
+        p.idproducto === product.idproducto
+          ? { ...p, cantidad: p.cantidad + 1 }
+          : p
+      ));
+    } else {
+      setNewServiceProducts([...newServiceProducts, {
+        ...product,
+        idproducto: product.idproducto,
+        nombre: product.nombre || product.name,
+        precio: product.precio_unitario,
+        cantidad: 1
+      }]);
+    }
+    setNewServiceSearchProduct("");
+  };
+
+  // Remover producto del carrito de nuevo servicio
+  const removeProductFromNewService = (idproducto: number) => {
+    setNewServiceProducts(newServiceProducts.filter(p => p.idproducto !== idproducto));
+  };
+
   // Remover producto del carrito
   const removeMaterialFromCart = (idproducto: number) => {
     setMaterialsCart(materialsCart.filter(item => item.idproducto !== idproducto));
@@ -266,9 +312,28 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
     setSelectedService(serviceId);
     const service = availableServices.find(s => s.idservicio === Number(serviceId));
     if (service) {
-      const price = Number(service.precio) || 0;
-      setSelectedServicePrice(String(price));
-      setManualServiceCost(price > 0 ? String(price) : "");
+      const aplicacionPrice = Number(service.precio_de_aplicacion ?? service.precio) || 0;
+      setSelectedServicePrice(String(aplicacionPrice));
+
+      const serviceProducts = service.productos || [];
+      const productsWithDetails = serviceProducts.map((prodId: number) => {
+        const product = products.find(p => p.idproducto === prodId);
+        if (product) {
+          return {
+            idproducto: product.idproducto,
+            nombre: product.nombre || product.name,
+            precio: product.precio_unitario,
+            cantidad: 1
+          };
+        }
+        return null;
+      }).filter(Boolean);
+
+      setMaterialsCart(productsWithDetails);
+
+      const productsTotal = productsWithDetails.reduce((sum: number, item: any) => sum + (item.precio || 0), 0);
+      const total = aplicacionPrice + productsTotal;
+      setManualServiceCost(String(total));
     }
   };
 
@@ -276,6 +341,9 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
     setShowRegisterDialog(open);
     if (open) {
       setSearchProduct("");
+      setMaterialsCart([]);
+      setSelectedService("");
+      setManualServiceCost("");
       loadProducts();
       getOpenBox();
     } else {
@@ -427,20 +495,27 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
 
     setLoading(true);
     try {
+      const productIds = newServiceProducts.map(p => p.idproducto);
+      const productsTotal = newServiceProducts.reduce((sum, p) => sum + (p.precio || 0) * (p.cantidad || 0), 0);
+      const total = Number(newServiceData.precio) + productsTotal;
+
       const response = await fetch(`${API_BASE}/agregar-servicio`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           descripcion: newServiceData.descripcion,
-          precio: Number(newServiceData.precio),
-          duracion: newServiceData.duracion || ""
+          precio_de_aplicacion: Number(newServiceData.precio),
+          duracion: newServiceData.duracion || "",
+          productos: productIds,
+          total: total
         })
       });
 
       if (!response.ok) throw new Error('Error al agregar servicio');
-      
+
       alert('Servicio agregado exitosamente');
       setNewServiceData({ descripcion: "", precio: "", duracion: "" });
+      setNewServiceProducts([]);
       setShowAddServiceDialog(false);
       await loadAvailableServices();
     } catch (err) {
@@ -607,7 +682,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                 Nuevo Servicio
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle style={{ color: '#9AAD97' }}>Agregar Nuevo Servicio</DialogTitle>
               </DialogHeader>
@@ -621,10 +696,10 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                   />
                 </div>
                 <div>
-                  <Label>Precio Sugerido</Label>
+                  <Label>Precio de Aplicación</Label>
                   <Input
                     type="number"
-                    placeholder="Precio"
+                    placeholder="Precio de aplicación del servicio"
                     value={newServiceData.precio}
                     onChange={(e) => setNewServiceData({ ...newServiceData, precio: e.target.value })}
                   />
@@ -637,6 +712,140 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                     onChange={(e) => setNewServiceData({ ...newServiceData, duracion: e.target.value })}
                   />
                 </div>
+
+                {/* Product Selection for New Service */}
+                <div className="border-t pt-4">
+                  <h4 style={{ color: '#9AAD97' }} className="font-semibold mb-2">Productos utilizados en este servicio</h4>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Busque productos del inventario para asociarlos al servicio.
+                  </p>
+                  <div className="relative mb-3">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por nombre, código o marca..."
+                      value={newServiceSearchProduct}
+                      onChange={(e) => setNewServiceSearchProduct(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+
+                  {newServiceSearchProduct.trim().length >= 2 && (
+                    <div className="space-y-2 max-h-[180px] overflow-y-auto mb-3">
+                    {products.filter(p => {
+                      const term = newServiceSearchProduct.toLowerCase();
+                      return (
+                        (p.nombre || '').toLowerCase().includes(term) ||
+                        (p.codigo || '').toLowerCase().includes(term) ||
+                        (p.marca || '').toLowerCase().includes(term)
+                      );
+                    }).slice(0, 5).map((product) => {
+                      const inCartQty = newServiceProducts.find(p => p.idproducto === product.idproducto)?.cantidad || 0;
+                      const available = Math.max(0, Number(product.stock ?? 0) - inCartQty);
+
+                      return (
+                        <div
+                          key={product.idproducto}
+                          onMouseEnter={() => setNewServiceHoveredProduct(product.idproducto)}
+                          onMouseLeave={() => setNewServiceHoveredProduct(null)}
+                          className="flex items-center justify-between p-3 border rounded-lg transition-all"
+                          style={{
+                            backgroundColor: newServiceHoveredProduct === product.idproducto ? '#9AAD97' : 'transparent',
+                            color: newServiceHoveredProduct === product.idproducto ? 'white' : 'inherit',
+                            borderColor: newServiceHoveredProduct === product.idproducto ? '#9AAD97' : 'inherit'
+                          }}
+                        >
+                          <div className="flex-1 min-w-0 pr-3">
+                            <p className="text-sm font-medium truncate">
+                              {product.nombre || product.name}
+                            </p>
+                            <p
+                              className="text-xs"
+                              style={{
+                                color: newServiceHoveredProduct === product.idproducto
+                                  ? 'rgba(255,255,255,0.85)'
+                                  : '#999'
+                              }}
+                            >
+                              Código: {product.codigo || product.code} | Stock: {product.stock}
+                              {inCartQty > 0 ? ` | En selección: ${inCartQty}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <p
+                              className="text-sm font-bold"
+                              style={{
+                                color: newServiceHoveredProduct === product.idproducto ? 'white' : '#D5B888'
+                              }}
+                            >
+                              S/ {(product.precio_unitario || 0).toFixed(2)}
+                            </p>
+                            <Button
+                              size="sm"
+                              disabled={available <= 0}
+                              onClick={() => addProductToNewService(product)}
+                              style={{
+                                backgroundColor: '#D5B888',
+                                color: 'white',
+                                border: 'none'
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Agregar
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    </div>
+                  )}
+
+                  {newServiceProducts.length > 0 && (
+                    <div className="rounded-lg border p-3 space-y-2" style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}>
+                      <p className="text-sm font-semibold" style={{ color: '#9AAD97' }}>
+                        Productos seleccionados ({newServiceProducts.length})
+                      </p>
+                      {newServiceProducts.map((item) => (
+                        <div key={item.idproducto} className="flex items-center gap-2 p-2 bg-white border rounded">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{item.nombre}</p>
+                            <p className="text-xs text-muted-foreground">
+                              S/ {(item.precio || 0).toFixed(2)} c/u
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold w-20 text-right" style={{ color: '#D5B888' }}>
+                            S/ {((item.precio || 0) * (item.cantidad || 0)).toFixed(2)}
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => removeProductFromNewService(item.idproducto)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <div className="flex justify-between items-center pt-2 border-t">
+                        <span className="text-sm font-semibold">Precio de aplicación:</span>
+                        <span className="text-sm" style={{ color: '#9AAD97' }}>
+                          S/ {Number(newServiceData.precio || 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-semibold">Productos:</span>
+                        <span className="text-sm" style={{ color: '#D5B888' }}>
+                          S/ {newServiceProducts.reduce((sum, p) => sum + (p.precio || 0) * (p.cantidad || 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t" style={{ backgroundColor: 'rgba(154, 173, 151, 0.15)' }}>
+                        <span className="font-semibold" style={{ color: '#9AAD97' }}>TOTAL:</span>
+                        <span className="font-bold" style={{ color: '#D5B888' }}>
+                          S/ {(Number(newServiceData.precio || 0) + newServiceProducts.reduce((sum, p) => sum + (p.precio || 0) * (p.cantidad || 0), 0)).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <Button className="w-full" onClick={handleAddNewService} disabled={loading} style={{ backgroundColor: '#D5B888', color: 'white', border: 'none' }}>
                   {loading ? 'Guardando...' : 'Agregar Servicio'}
                 </Button>
@@ -833,15 +1042,43 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                 {/* Costo del Servicio */}
                 <div className="border-b pb-4">
                   <h3 style={{ color: '#9AAD97' }} className="font-semibold mb-2">Costo del Servicio</h3>
-                  <div>
-                    <Label>Costo Total Ingresado por el Personal</Label>
-                    <Input
-                      type="number"
-                      placeholder="Ingrese el costo total del servicio"
-                      value={manualServiceCost}
-                      onChange={(e) => setManualServiceCost(e.target.value)}
-                    />
-                  </div>
+                  {selectedService && (
+                    <div className="space-y-2">
+                      {materialsCart.length > 0 && (
+                        <div className="rounded-lg border p-3" style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}>
+                          <p className="text-xs text-muted-foreground mb-2">Desglose del costo:</p>
+                          <div className="flex justify-between text-sm">
+                            <span>Precio de aplicación:</span>
+                            <span style={{ color: '#9AAD97' }}>S/ {Number(selectedServicePrice || 0).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Productos ({materialsCart.length}):</span>
+                            <span style={{ color: '#D5B888' }}>S/ {materialsCart.reduce((sum, m) => sum + (m.precio || 0) * (m.cantidad || 0), 0).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center pt-2 mt-2 border-t" style={{ backgroundColor: 'rgba(154, 173, 151, 0.15)' }}>
+                            <span className="font-semibold" style={{ color: '#9AAD97' }}>TOTAL:</span>
+                            <span className="font-bold text-lg" style={{ color: '#D5B888' }}>
+                              S/ {manualServiceCost || '0.00'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {materialsCart.length === 0 && (
+                        <div className="flex justify-between items-center p-3 rounded-lg border" style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}>
+                          <span className="font-semibold" style={{ color: '#9AAD97' }}>Precio de aplicación:</span>
+                          <span className="font-bold text-lg" style={{ color: '#D5B888' }}>
+                            S/ {manualServiceCost || '0.00'}
+                          </span>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-2">
+                        El costo total se calcula automáticamente según los productos seleccionados y el precio de aplicación del servicio.
+                      </p>
+                    </div>
+                  )}
+                  {!selectedService && (
+                    <p className="text-sm text-muted-foreground">Seleccione un servicio para ver el costo total.</p>
+                  )}
                 </div>
 
                 {/* Método de Pago */}
