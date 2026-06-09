@@ -1094,7 +1094,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                   style={{ borderColor: '#D5B888', backgroundColor: 'rgba(154, 173, 151, 0.05)' }}
                 >
                   <div className="flex flex-col h-full">
-                    <h4 className="font-semibold text-sm mb-2" style={{ color: '#9AAD97' }}>
+                    <h4 className="font-semibold text-sm mb-2 line-clamp-2" style={{ color: '#9AAD97' }}>
                       {service.descripcion}
                     </h4>
                     {service.duracion && (
