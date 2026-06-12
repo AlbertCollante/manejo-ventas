@@ -1176,14 +1176,19 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               {(() => {
+                if (openBoxId === null) {
+                  return (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No hay caja abierta
+                    </p>
+                  );
+                }
+
                 let displayedSales = currentUser.role && currentUser.role.toLowerCase() === 'vendedor'
                   ? sales.filter(s => s.user === currentUser.name)
                   : sales;
                 
-                // Filtrar solo ventas de la caja abierta
-                if (openBoxId !== null) {
-                  displayedSales = displayedSales.filter(s => s.id_apertura === openBoxId);
-                }
+                displayedSales = displayedSales.filter(s => s.id_apertura === openBoxId);
                 
                 if (displayedSales.length === 0) {
                   return (
