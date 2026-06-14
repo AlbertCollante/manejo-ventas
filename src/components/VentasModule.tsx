@@ -102,7 +102,8 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
   const [lastSaleData, setLastSaleData] = useState<any>(null);
   const [sales, setSales] = useState<any[]>([]);
   const [showReportDialog, setShowReportDialog] = useState(false);
-  const [reportFilterDate, setReportFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reportFilterDate, setReportFilterDate] = useState("");
+  const [reportFilterDateEnd, setReportFilterDateEnd] = useState("");
   const [reportFilterUser, setReportFilterUser] = useState("all");
   const [hoveredProductId, setHoveredProductId] = useState<number | null>(null);
   const [products, setProducts] = useState<any[]>([]);
@@ -114,6 +115,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
   const [mayoristaPrice, setMayoristaPrice] = useState<string>("");
   const [hoveredMayoristaProductId, setHoveredMayoristaProductId] = useState<number | null>(null);
   const [openBoxId, setOpenBoxId] = useState<number | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
 
   const fetchSales = async () => {
     setLoadingSales(true);
@@ -1002,21 +1004,36 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
   };
 
   // Función para generar reporte en Excel
-  const generateSalesReport = () => {
-    // Usar ventas cargadas desde la API
-    const allSales = sales;
+  const generateSalesReport = async () => {
+    setReportLoading(true);
+    try {
+      // Usar ventas cargadas desde la API
+      const allSales = sales;
 
-    // Filtrar ventas por fecha y usuario (si es vendedor, sólo su usuario)
+    // Filtrar ventas por rango de fechas y usuario
     const filteredSales = allSales.filter(sale => {
-      const matchDate = !reportFilterDate || sale.dateOnly === reportFilterDate;
-      const matchUser = reportFilterUser === "all" || sale.user === reportFilterUser || (currentUser.role.toLowerCase() === 'vendedor' && sale.user === currentUser.name);
-      return matchDate && matchUser;
+      const saleDate = sale.dateOnly;
+      const matchDateStart = !reportFilterDate || saleDate >= reportFilterDate;
+      const matchDateEnd = !reportFilterDateEnd || saleDate <= reportFilterDateEnd;
+      const matchUser = reportFilterUser === "all" || sale.user === reportFilterUser;
+      return matchDateStart && matchDateEnd && matchUser;
     });
 
     if (filteredSales.length === 0) {
       alert("No hay ventas que coincidan con los filtros seleccionados");
       return;
     }
+
+    // Obtener detalles de cada venta que no tenga items
+    const salesWithItems = await Promise.all(
+      filteredSales.map(async (sale) => {
+        if (!sale.items || sale.items.length === 0) {
+          const detalle = await fetchSaleDetail(sale.id);
+          return { ...sale, items: detalle || [] };
+        }
+        return sale;
+      })
+    );
 
     // Helper para convertir fecha ISO a formato es-PE
     const formatDateEsPE = (isoDate: string) => {
@@ -1031,7 +1048,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     };
 
     // Preparar datos para Excel
-    const reportData = filteredSales.map(sale => ({
+    const reportData = salesWithItems.map(sale => ({
       "Nro Caja": sale.id_apertura || '-',
       "ID Venta": sale.id,
       "Fecha": formatDateEsPE(sale.dateOnly),
@@ -1055,18 +1072,25 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     const wb = XLSX.utils.book_new();
 
     // Hoja 1: Resumen
+    const dateRangeLabel = reportFilterDate && reportFilterDateEnd
+      ? `Del ${formatDateEsPE(reportFilterDate)} al ${formatDateEsPE(reportFilterDateEnd)}`
+      : reportFilterDate
+        ? `Desde ${formatDateEsPE(reportFilterDate)}`
+        : reportFilterDateEnd
+          ? `Hasta ${formatDateEsPE(reportFilterDateEnd)}`
+          : "Todas las fechas";
     const summaryData = [
       ["REPORTE DE VENTAS"],
       [""],
       ["Fecha de Generación:", new Date().toLocaleDateString('es-PE')],
-      ["Filtro de Fecha:", reportFilterDate ? formatDateEsPE(reportFilterDate) : "Todas las fechas"],
+      ["Filtro de Fecha:", dateRangeLabel],
       ["Filtro de Vendedor:", reportFilterUser === "all" ? "Todos los vendedores" : reportFilterUser],
       [""],
       ["RESUMEN"],
       ["Total de Ventas:", totalVentas],
       ["Monto Total:", "S/ " + totalMonto.toFixed(2)],
       ["Total Descuentos:", "S/ " + totalDescuentos.toFixed(2)],
-      ["Promedio por Venta:", "S/ " + (totalMonto / totalVentas).toFixed(2)]
+      ["Promedio por Venta:", "S/ " + (totalVentas > 0 ? (totalMonto / totalVentas).toFixed(2) : "0.00")]
     ];
 
     const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
@@ -1082,11 +1106,39 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     ];
     XLSX.utils.book_append_sheet(wb, ws2, "Detalle");
 
+    // Hoja 3: Detalle de productos vendidos
+    const itemsDetailData = salesWithItems.flatMap(sale =>
+      (sale.items || []).map((item: any) => ({
+        "ID Venta": sale.id,
+        "Fecha": formatDateEsPE(sale.dateOnly),
+        "Hora": getTime(sale.date),
+        "Vendedor": sale.user,
+        "Cliente": sale.customer,
+        "Producto": item.name || item.nombre || '',
+        "Cantidad": item.quantity || item.cantidad || 0,
+        "Precio Unitario": (item.price || item.precio || 0).toFixed(2),
+        "Subtotal": ((item.price || item.precio || 0) * (item.quantity || item.cantidad || 0)).toFixed(2)
+      }))
+    );
+
+    const ws3 = XLSX.utils.json_to_sheet(itemsDetailData);
+    ws3["!cols"] = [
+      { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 20 },
+      { wch: 25 }, { wch: 10 }, { wch: 14 }, { wch: 12 }
+    ];
+    XLSX.utils.book_append_sheet(wb, ws3, "Productos");
+
     // Descargar archivo
-    const fileName = `Reporte_Ventas_${formatDateEsPE(reportFilterDate) || 'Todas'}_${new Date().toLocaleDateString('es-PE').replace(/\//g, "-")}.xlsx`;
+    const fileName = `Reporte_Ventas_${reportFilterDate || 'Inicio'}_${reportFilterDateEnd || 'Fin'}_${new Date().toLocaleDateString('es-PE').replace(/\//g, "-")}.xlsx`;
     XLSX.writeFile(wb, fileName);
-    
+
     setShowReportDialog(false);
+    } catch (error) {
+      console.error('Error generando reporte:', error);
+      alert('Error al generar el reporte');
+    } finally {
+      setReportLoading(false);
+    }
   };
 
   // Obtener vendedores únicos del historial
@@ -1139,7 +1191,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                     <div className="flex-1">
                       <p style={{ color: hoveredProductId === product.id ? 'white' : 'inherit' }}>{product.name}</p>
                       <p className="text-sm" style={{ color: hoveredProductId === product.id ? 'rgba(255,255,255,0.8)' : '#999' }}>
-                        Código: {product.code} | Stock: {product.stock} | Estante: {product.shelf ?? product.estante ?? 'N/A'}
+                        Código: {product.code} | Stock: {product.stock} | Estante: {product.shelf ?? product.estante ?? 'N/A'} | Marca: {product.brand ?? 'N/A'}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1447,65 +1499,67 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       <Card style={{ borderTop: '4px solid #9AAD97' }}>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle style={{ color: '#9AAD97' }}>Ventas Recientes</CardTitle>
-          <Button 
-            onClick={() => setShowReportDialog(true)}
-            style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Generar Reporte
-          </Button>
+          {(!currentUser.role || currentUser.role.toLowerCase() !== 'vendedor') && (
+            <Button
+              onClick={() => setShowReportDialog(true)}
+              style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Generar Reporte
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID Venta</TableHead>
-                <TableHead>Nro Caja</TableHead>
-                <TableHead>Fecha</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Vendedor</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(() => {
-                const displayedSales = currentUser.role && currentUser.role.toLowerCase() === 'vendedor'
-                  ? sales.filter(s => s.user === currentUser.name)
-                  : sales;
-                if (displayedSales.length > 0) {
-                  return displayedSales.map((sale) => (
-                    <TableRow key={sale.id}>
-                      <TableCell>{sale.id}</TableCell>
-                      <TableCell className="font-bold" style={{ color: '#9AAD97' }}>{sale.id_apertura || '-'}</TableCell>
-                      <TableCell>{sale.date}</TableCell>
-                      <TableCell>{sale.customer}</TableCell>
-                      <TableCell>S/ {sale.total.toFixed(2)}</TableCell>
-                      <TableCell>{sale.user}</TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenVoucherDialog(sale)}
-                          style={{ color: '#9AAD97', borderColor: '#9AAD97' }}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          Ver
-                        </Button>
+          <div className="overflow-auto" style={{ maxHeight: '400px' }}>
+            <Table>
+              <TableHeader className="sticky top-0 bg-white">
+                <TableRow>
+                  <TableHead>ID Venta</TableHead>
+                  <TableHead>Nro Caja</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Vendedor</TableHead>
+                  <TableHead>Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(() => {
+                  const displayedSales = sales.filter(s => s.id_apertura === openBoxId);
+                  if (displayedSales.length > 0) {
+                    return displayedSales.map((sale) => (
+                      <TableRow key={sale.id}>
+                        <TableCell>{sale.id}</TableCell>
+                        <TableCell className="font-bold" style={{ color: '#9AAD97' }}>{sale.id_apertura || '-'}</TableCell>
+                        <TableCell>{sale.date}</TableCell>
+                        <TableCell>{sale.customer}</TableCell>
+                        <TableCell>S/ {sale.total.toFixed(2)}</TableCell>
+                        <TableCell>{sale.user}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenVoucherDialog(sale)}
+                            style={{ color: '#9AAD97', borderColor: '#9AAD97' }}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ));
+                  }
+                  return (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                        No hay ventas registradas en esta caja
                       </TableCell>
                     </TableRow>
-                  ));
-                }
-                return (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
-                      No hay ventas registradas
-                    </TableCell>
-                  </TableRow>
-                );
-              })()}
-            </TableBody>
-          </Table>
+                  );
+                })()}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -1645,21 +1699,32 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
           <DialogHeader>
             <DialogTitle style={{ color: '#D5B888' }}>Generar Reporte de Ventas</DialogTitle>
             <DialogDescription>
-              Selecciona los filtros para generar el reporte en Excel
+              Selecciona el rango de fechas y vendedor para generar el reporte en Excel
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="filterDate" style={{ color: '#D5B888' }}>Fecha de Venta</Label>
-              <Input
-                id="filterDate"
-                type="date"
-                value={reportFilterDate}
-                onChange={(e) => setReportFilterDate(e.target.value)}
-              />
-              <p className="text-xs text-gray-500">Por defecto: hoy</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="filterDateStart" style={{ color: '#D5B888' }}>Fecha Inicio</Label>
+                <Input
+                  id="filterDateStart"
+                  type="date"
+                  value={reportFilterDate}
+                  onChange={(e) => setReportFilterDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="filterDateEnd" style={{ color: '#D5B888' }}>Fecha Fin</Label>
+                <Input
+                  id="filterDateEnd"
+                  type="date"
+                  value={reportFilterDateEnd}
+                  onChange={(e) => setReportFilterDateEnd(e.target.value)}
+                />
+              </div>
             </div>
+            <p className="text-xs text-gray-500">Selecciona el rango de fechas para el reporte</p>
 
             <div className="space-y-2">
               <Label style={{ color: '#9AAD97' }}>Vendedor</Label>
@@ -1674,17 +1739,9 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-gray-500">Selecciona un vendedor o deja en blanco para todos</p>
             </div>
 
-            <div className="bg-blue-50 p-3 rounded border border-blue-200">
-              <p className="text-sm text-blue-800">
-                <strong>Total de ventas con filtros:</strong> {dataService.getSales().filter(s => 
-                  (!reportFilterDate || s.dateOnly === reportFilterDate) &&
-                  (reportFilterUser === "all" || s.user === reportFilterUser)
-                ).length}
-              </p>
-            </div>
+            
           </div>
 
           <div className="flex gap-2 justify-end pt-4">
@@ -1696,10 +1753,17 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
             </Button>
             <Button
               onClick={generateSalesReport}
+              disabled={reportLoading}
               style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
             >
-              <Download className="h-4 w-4 mr-2" />
-              Generar Excel
+              {reportLoading ? (
+                <>Generando...</>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Generar Excel
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>

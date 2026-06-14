@@ -253,26 +253,26 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
           </CardHeader>
           <CardContent>
             {aperturas.length > 0 ? (
-              <div className="overflow-x-auto max-h-16 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nro Caja</TableHead>
-                      <TableHead>Fecha y Hora</TableHead>
-                      <TableHead>Usuario</TableHead>
-                      <TableHead>Monto Inicial</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Observaciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+              <div className="overflow-y-auto" style={{ maxHeight: '300px' }}>
+                <table className="w-full text-sm">
+                  <thead className="bg-muted sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium">Nro Caja</th>
+                      <th className="px-4 py-2 text-left font-medium">Fecha y Hora</th>
+                      <th className="px-4 py-2 text-left font-medium">Usuario</th>
+                      <th className="px-4 py-2 text-left font-medium">Monto Inicial</th>
+                      <th className="px-4 py-2 text-left font-medium">Estado</th>
+                      <th className="px-4 py-2 text-left font-medium">Observaciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {aperturas.slice().reverse().map((apertura) => (
-                      <TableRow key={apertura.id}>
-                        <TableCell className="font-bold" style={{ color: '#9AAD97' }}>{apertura.id}</TableCell>
-                        <TableCell className="text-sm">{apertura.fecha}</TableCell>
-                        <TableCell>{apertura.usuario}</TableCell>
-                        <TableCell>S/ {parseFloat(apertura.montoInicial).toFixed(2)}</TableCell>
-                        <TableCell>
+                      <tr key={apertura.id} className="border-t">
+                        <td className="px-4 py-2 font-bold" style={{ color: '#9AAD97' }}>{apertura.id}</td>
+                        <td className="px-4 py-2">{apertura.fecha}</td>
+                        <td className="px-4 py-2">{apertura.usuario}</td>
+                        <td className="px-4 py-2">S/ {parseFloat(apertura.montoInicial).toFixed(2)}</td>
+                        <td className="px-4 py-2">
                           <span style={{
                             padding: '0.25rem 0.75rem',
                             backgroundColor: apertura.estado === 'abierto' ? '#fef08a' : '#d1fae5',
@@ -283,15 +283,15 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
                           }}>
                             {apertura.estado === 'abierto' ? 'Abierto' : 'Cerrado'}
                           </span>
-                        </TableCell>
-                        <TableCell className="text-sm">{apertura.observaciones || '-'}</TableCell>
-                      </TableRow>
+                        </td>
+                        <td className="px-4 py-2">{apertura.observaciones || '-'}</td>
+                      </tr>
                     ))}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No hay aperturas registradas</p>
+              <p className="text-sm text-muted-foreground p-4">No hay aperturas registradas</p>
             )}
           </CardContent>
         </Card>

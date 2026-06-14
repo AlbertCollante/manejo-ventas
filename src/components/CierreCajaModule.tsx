@@ -139,7 +139,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       vuelto: Number(sale.vuelto ?? 0),
       paymentMethod,
       user: sale.usuario ?? sale.user ?? 'caja1',
-      type: 'venta'
+      type: 'venta',
+      id_apertura: sale.id_apertura ?? null
     };
   };
 
@@ -198,90 +199,65 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     };
   };
 
-  const fetchVentasDelDia = async (aperturaTime: string) => {
+  const fetchVentasDelDia = async (aperturaId: number) => {
     try {
       const resp = await fetch(`${API_BASE}/ventas`);
       if (!resp.ok) throw new Error('Error al obtener ventas de la API');
-      
+
       const data = await resp.json();
       const allSales = Array.isArray(data) ? data : [];
-      
+
       // Normalizar ventas
       const normalizedSales = allSales.map(normalizeApiSale);
 
-      // Convertir fecha de apertura a objeto Date (soporta ISO o DD/MM/YYYY HH:MM:SS)
-      let aperturaDate = new Date(aperturaTime);
-      if (isNaN(aperturaDate.getTime())) {
-        try {
-          const [datePart, timePart] = String(aperturaTime).split(' ');
-          const [day, month, year] = (datePart ?? '').split('/');
-          const [hour = '0', minute = '0', second = '0'] = (timePart ?? '').split(':');
-          aperturaDate = new Date(
-            parseInt(year, 10),
-            parseInt(month, 10) - 1,
-            parseInt(day, 10),
-            parseInt(hour, 10) || 0,
-            parseInt(minute, 10) || 0,
-            parseInt(second, 10) || 0
-          );
-        } catch (e) {
-          aperturaDate = new Date();
-        }
-      }
+      // Filtrar ventas que pertenecen a esta caja (por aperturaId)
+      const filteredSales = normalizedSales.filter(sale => sale.id_apertura === aperturaId);
 
-      // Filtrar ventas que ocurrieron desde la apertura hasta ahora
-      const ventasDesdeApertura = normalizedSales.filter(sale => {
-        const saleDateObj = sale.dateObj instanceof Date ? sale.dateObj : new Date(sale.date);
-        if (!saleDateObj || isNaN(saleDateObj.getTime())) return false;
-        return saleDateObj >= aperturaDate;
-      }).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+      // Obtener detalles de cada venta para saber los productos
+      const ventasConDetalles = await Promise.all(
+        filteredSales.map(async (sale) => {
+          if (!sale.items || sale.items.length === 0) {
+            try {
+              const detailResp = await fetch(`${API_BASE}/detalle-venta`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idventa: sale.id })
+              });
+              if (detailResp.ok) {
+                const detailData = await detailResp.json();
+                const items = Array.isArray(detailData) ? detailData : (detailData.detalle || []);
+                return { ...sale, items };
+              }
+            } catch (e) {
+              console.error('Error obteniendo detalle de venta:', e);
+            }
+          }
+          return sale;
+        })
+      );
 
-      setVentasDelDia(ventasDesdeApertura);
+      setVentasDelDia(ventasConDetalles.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime()));
     } catch (err) {
       console.error('Error cargando ventas:', err);
       setVentasDelDia([]);
     }
   };
 
-  const fetchServiciosDelDia = async (aperturaTime: string, aperturaId: number) => {
+  const fetchServiciosDelDia = async (aperturaId: number) => {
     try {
       const resp = await fetch(`${API_BASE}/servicios`);
       if (!resp.ok) throw new Error('Error al obtener servicios de la API');
-      
+
       const data = await resp.json();
       const allServices = Array.isArray(data) ? data : [];
-      
+
       // Normalizar servicios
       const normalizedServices = allServices.map(normalizeApiService);
 
-      // Convertir fecha de apertura a objeto Date
-      let aperturaDate = new Date(aperturaTime);
-      if (isNaN(aperturaDate.getTime())) {
-        try {
-          const [datePart, timePart] = String(aperturaTime).split(' ');
-          const [day, month, year] = (datePart ?? '').split('/');
-          const [hour = '0', minute = '0', second = '0'] = (timePart ?? '').split(':');
-          aperturaDate = new Date(
-            parseInt(year, 10),
-            parseInt(month, 10) - 1,
-            parseInt(day, 10),
-            parseInt(hour, 10) || 0,
-            parseInt(minute, 10) || 0,
-            parseInt(second, 10) || 0
-          );
-        } catch (e) {
-          aperturaDate = new Date();
-        }
-      }
+      // Filtrar servicios de la apertura actual (solo por aperturaId)
+      const filteredServices = normalizedServices.filter(service => service.idapertura === aperturaId);
 
-      // Filtrar servicios de la apertura actual
-      const serviciosDesdeApertura = normalizedServices.filter(service => {
-        const serviceDateObj = service.dateObj instanceof Date ? service.dateObj : new Date(service.date);
-        if (!serviceDateObj || isNaN(serviceDateObj.getTime())) return false;
-        return serviceDateObj >= aperturaDate && service.idapertura === aperturaId;
-      }).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-
-      setServiciosDelDia(serviciosDesdeApertura);
+      setServiciosDelDia(filteredServices.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime()));
     } catch (err) {
       console.error('Error cargando servicios:', err);
       setServiciosDelDia([]);
@@ -324,10 +300,10 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
         setAperturaDelDia({ ...openApertura, fecha });
         setMontoInicial(Number(openApertura.montoInicial ?? 0));
 
-        // Cargar ventas desde la API después de la apertura
-        await fetchVentasDelDia(rawFecha);
-        // Cargar servicios desde la API después de la apertura
-        await fetchServiciosDelDia(rawFecha, openApertura.id);
+        // Cargar ventas desde la API de esta caja
+        await fetchVentasDelDia(openApertura.id);
+        // Cargar servicios de esta caja
+        await fetchServiciosDelDia(openApertura.id);
       } else {
         setAperturaDelDia(null);
         setMontoInicial(0);
@@ -950,97 +926,103 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
 
           <Card>
             <CardHeader>
-              <CardTitle>Detalle de Ventas del Día</CardTitle>
-              {ventasDelDia.length === 0 && (
-                <p className="text-sm text-muted-foreground">No hay ventas registradas para hoy</p>
-              )}
+              <CardTitle>Resumen de Ventas</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID Venta</TableHead>
-                    <TableHead>Hora</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Método de Pago</TableHead>
-                    <TableHead>Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ventasDelDia.length > 0 ? (
-                    ventasDelDia.map((venta) => {
-                      // Extraer hora de la fecha (formato: "DD/MM/YYYY HH:MM:SS")
-                      const [, hora] = venta.date.split(' ');
-                      return (
-                        <TableRow key={venta.id}>
-                          <TableCell>{venta.id}</TableCell>
-                          <TableCell>{hora || 'N/A'}</TableCell>
-                          <TableCell>{venta.customer}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{venta.paymentMethod}</Badge>
-                          </TableCell>
-                          <TableCell>S/ {venta.total.toFixed(2)}</TableCell>
-                        </TableRow>
-                      );
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
-                        No hay ventas registradas para hoy
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                  <p className="text-sm text-muted-foreground">Cantidad de Ventas</p>
+                  <p className="text-2xl font-bold text-green-700">{ventasDelDia.length}</p>
+                </div>
+                <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                  <p className="text-sm text-muted-foreground">Productos Vendidos</p>
+                  <p className="text-2xl font-bold text-green-700">
+                    {ventasDelDia.reduce((sum, v) => sum + (v.items?.length || 0), 0)}
+                  </p>
+                </div>
+                <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                  <p className="text-sm text-muted-foreground">Total Ventas</p>
+                  <p className="text-2xl font-bold text-green-700">S/ {totalVentas.toFixed(2)}</p>
+                </div>
+                <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                  <p className="text-sm text-muted-foreground">Ticket Promedio</p>
+                  <p className="text-2xl font-bold text-blue-700">
+                    S/ {ventasDelDia.length > 0 ? (totalVentas / ventasDelDia.length).toFixed(2) : '0.00'}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-sm font-medium mb-3">Por Método de Pago</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Efectivo</p>
+                  <p className="text-lg font-bold">S/ {ventasDelDia.filter(v => v.paymentMethod === "Efectivo").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Efectivo").length} ventas</p>
+                </div>
+                <div className="p-3 bg-purple-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Yape</p>
+                  <p className="text-lg font-bold">S/ {ventasDelDia.filter(v => v.paymentMethod === "Yape").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Yape").length} ventas</p>
+                </div>
+                <div className="p-3 bg-cyan-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Tarjeta</p>
+                  <p className="text-lg font-bold">S/ {ventasDelDia.filter(v => v.paymentMethod === "Tarjeta").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Tarjeta").length} ventas</p>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Transferencia</p>
+                  <p className="text-lg font-bold">S/ {ventasDelDia.filter(v => v.paymentMethod === "Transferencia").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Transferencia").length} ventas</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Detalle de Servicios del Día</CardTitle>
-              {serviciosDelDia.length === 0 && (
-                <p className="text-sm text-muted-foreground">No hay servicios registrados para hoy</p>
-              )}
+              <CardTitle>Resumen de Servicios</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID Servicio</TableHead>
-                    <TableHead>Hora</TableHead>
-                    <TableHead>Vendedor</TableHead>
-                    <TableHead>Descripción</TableHead>
-                    <TableHead>Método de Pago</TableHead>
-                    <TableHead>Monto</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {serviciosDelDia.length > 0 ? (
-                    serviciosDelDia.map((servicio) => {
-                      // Extraer hora de la fecha
-                      const [, hora] = servicio.date.split(' ');
-                      return (
-                        <TableRow key={servicio.id}>
-                          <TableCell>{servicio.id}</TableCell>
-                          <TableCell>{hora || 'N/A'}</TableCell>
-                          <TableCell>{servicio.vendor}</TableCell>
-                          <TableCell>{servicio.description}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{servicio.paymentMethod}</Badge>
-                          </TableCell>
-                          <TableCell>S/ {servicio.subtotal.toFixed(2)}</TableCell>
-                        </TableRow>
-                      );
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
-                        No hay servicios registrados para hoy
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+                  <p className="text-sm text-muted-foreground">Cantidad de Servicios</p>
+                  <p className="text-2xl font-bold text-purple-700">{serviciosDelDia.length}</p>
+                </div>
+                <div className="p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+                  <p className="text-sm text-muted-foreground">Total Servicios</p>
+                  <p className="text-2xl font-bold text-purple-700">S/ {totalServicios.toFixed(2)}</p>
+                </div>
+                <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                  <p className="text-sm text-muted-foreground">Ticket Promedio</p>
+                  <p className="text-2xl font-bold text-blue-700">
+                    S/ {serviciosDelDia.length > 0 ? (totalServicios / serviciosDelDia.length).toFixed(2) : '0.00'}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-sm font-medium mb-3">Por Método de Pago</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Efectivo</p>
+                  <p className="text-lg font-bold">S/ {serviciosDelDia.filter(s => s.paymentMethod === "Efectivo").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Efectivo").length} servicios</p>
+                </div>
+                <div className="p-3 bg-purple-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Yape</p>
+                  <p className="text-lg font-bold">S/ {serviciosDelDia.filter(s => s.paymentMethod === "Yape").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Yape").length} servicios</p>
+                </div>
+                <div className="p-3 bg-cyan-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Tarjeta</p>
+                  <p className="text-lg font-bold">S/ {serviciosDelDia.filter(s => s.paymentMethod === "Tarjeta").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Tarjeta").length} servicios</p>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Transferencia</p>
+                  <p className="text-lg font-bold">S/ {serviciosDelDia.filter(s => s.paymentMethod === "Transferencia").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Transferencia").length} servicios</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

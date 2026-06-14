@@ -3,14 +3,10 @@ import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Search, Plus, Edit, AlertTriangle, Package, Download, Filter, Lock, Trash2 } from "lucide-react";
-import { Badge } from "./ui/badge";
+import { Search, Plus, Edit, AlertTriangle, Package, Download, Filter, Lock } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { dataService } from "../services/dataService";
 
 const API_BASE = 'http://localhost:9000';
 
@@ -150,7 +146,7 @@ const normalizeProduct = (product: any): Product => {
 export function InventarioModule() {
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
-  const [filterLocation, setFilterLocation] = useState("all");
+  const [filterShelf, setFilterShelf] = useState("all");
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [codeSearch, setCodeSearch] = useState("");
@@ -169,6 +165,8 @@ export function InventarioModule() {
   });
 
   const [addProductLoading, setAddProductLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -221,7 +219,7 @@ export function InventarioModule() {
   }, []);
 
   const categories = ["all", "Analgésicos", "Antiinflamatorios", "Antibióticos", "Antihistamínicos", "Antiácidos", "Tópicos", "Servicios"];
-  const locations = ["all", "Estante A1", "Estante A2", "Estante B1", "Estante C1", "Estante D1", "Estante E1", "Estante S1", "Estante S2"];
+  const shelves = ["all", ...new Set(products.map(p => p.shelf || p.estante).filter(Boolean))];
   const brands = ["Farmex", "Bayer", "Labsur", "Roemmers", "Pfizer", "Novartis"];
 
   // Autocompletado por código
@@ -238,9 +236,9 @@ export function InventarioModule() {
                          (p.code || '').toLowerCase().includes(search.toLowerCase()) ||
                          (p.brand || '').toLowerCase().includes(search.toLowerCase());
     const matchesCategory = filterCategory === "all" || p.category === filterCategory;
-    const matchesLocation = filterLocation === "all" || p.location === filterLocation;
+    const matchesShelf = filterShelf === "all" || p.shelf === filterShelf || p.estante === filterShelf;
     const matchesLowStock = !filterLowStock || (p.stock || 0) <= (p.minStock || 0);
-    return matchesSearch && matchesCategory && matchesLocation && matchesLowStock;
+    return matchesSearch && matchesCategory && matchesShelf && matchesLowStock;
   });
 
   const lowStockCount = products.filter(p => (p.stock || 0) <= (p.minStock || 0)).length;
@@ -340,20 +338,57 @@ export function InventarioModule() {
     }
   };
 
-  const handleUpdateProduct = () => {
+  const handleUpdateProduct = async () => {
     if (!editingProduct) return;
-    
-    const updatedProducts = products.map(p => 
-      p.id === editingProduct.id ? editingProduct : p
-    );
-    
-    setProducts(updatedProducts);
-    
-    // Guardar en localStorage con la clave correcta
-    localStorage.setItem('botica_products', JSON.stringify(updatedProducts));
-    
-    setEditingProduct(null);
-    alert("Producto actualizado exitosamente");
+    setSaveLoading(true);
+    try {
+      const payload = {
+        id: editingProduct.id,
+        nombre: editingProduct.name,
+        marca: editingProduct.brand,
+        categoria: editingProduct.category,
+        estante: editingProduct.shelf,
+        stock_actual: editingProduct.stock,
+        stock_minimo: editingProduct.minStock,
+        precio_compra: editingProduct.purchasePrice,
+        precio_unitario: editingProduct.priceUnit,
+        precio_blister: editingProduct.priceBlister,
+        precio_caja: editingProduct.priceBox,
+        unidades_blister: editingProduct.unitsPerBlister,
+        blisters_caja: editingProduct.blistersPerBox,
+        vencimiento: editingProduct.expiry,
+        ubicacion: editingProduct.location,
+      };
+
+      const response = await fetch(`${API_BASE}/actualizar-producto`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Error al actualizar producto');
+      }
+
+      const invRes = await fetch(`${API_BASE}/inventario-productos`);
+      if (invRes.ok) {
+        const data = await invRes.json();
+        if (Array.isArray(data)) {
+          const normalized = data.map(normalizeApiProduct);
+          setProducts(normalized);
+          localStorage.setItem('botica_products', JSON.stringify(normalized));
+        }
+      }
+
+      setEditingProduct(null);
+      setEditDialogOpen(false);
+      alert("Producto actualizado exitosamente");
+    } catch (error) {
+      alert(`Error: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   const downloadReport = () => {
@@ -728,14 +763,14 @@ export function InventarioModule() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={filterLocation} onValueChange={setFilterLocation}>
+            <Select value={filterShelf} onValueChange={setFilterShelf}>
               <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Ubicación" />
+                <SelectValue placeholder="Estante" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
-                {locations.slice(1).map((loc) => (
-                  <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
+                {shelves.slice(1).map((shelf) => (
+                  <SelectItem key={shelf} value={shelf}>{shelf}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -753,116 +788,186 @@ export function InventarioModule() {
             </Button>
           </div>
 
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Categoría</TableHead>
-                  <TableHead>Marca</TableHead>
-                  <TableHead>Stock Actual</TableHead>
-                  <TableHead>Stock Mínimo</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Precio Caja</TableHead>
-                  <TableHead>Precio Compra</TableHead>
-                  <TableHead>Precio Unitario</TableHead>
-                  <TableHead>Precio Blíster</TableHead>
-                  <TableHead>Precio Caja Venta</TableHead>
-                  <TableHead>Unidades Blíster</TableHead>
-                  <TableHead>Blisters Caja</TableHead>
-                  <TableHead>Vencimiento</TableHead>
-                  <TableHead>Ubicación</TableHead>
-                  <TableHead>Estante</TableHead>
-                  <TableHead>Valor Total</TableHead>
-                  <TableHead>Ganancia</TableHead>
-                  <TableHead>Compra</TableHead>
-                  <TableHead>Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+          <div className="overflow-y-auto" style={{ maxHeight: '55vh', scrollbarWidth: 'thin' }}>
+            <table className="w-full text-sm border-collapse">
+              <thead className="sticky top-0 z-10" style={{ backgroundColor: 'white' }}>
+                <tr>
+                  <th className="px-2 py-2 text-left font-medium">ID</th>
+                  <th className="px-2 py-2 text-left font-medium">Nombre</th>
+                  <th className="px-2 py-2 text-left font-medium">Categoría</th>
+                  <th className="px-2 py-2 text-left font-medium">Marca</th>
+                  <th className="px-2 py-2 text-left font-medium">Stock Actual</th>
+                  <th className="px-2 py-2 text-left font-medium">Stock Mínimo</th>
+                  <th className="px-2 py-2 text-left font-medium">Estado</th>
+                  <th className="px-2 py-2 text-left font-medium">Precio Caja</th>
+                  <th className="px-2 py-2 text-left font-medium">Precio Compra</th>
+                  <th className="px-2 py-2 text-left font-medium">Precio Unitario</th>
+                  <th className="px-2 py-2 text-left font-medium">Precio Blíster</th>
+                  <th className="px-2 py-2 text-left font-medium">Precio Caja Venta</th>
+                  <th className="px-2 py-2 text-left font-medium">Uds Blíster</th>
+                  <th className="px-2 py-2 text-left font-medium">Blísters Caja</th>
+                  <th className="px-2 py-2 text-left font-medium">Vencimiento</th>
+                  <th className="px-2 py-2 text-left font-medium">Ubicación</th>
+                  <th className="px-2 py-2 text-left font-medium">Estante</th>
+                  <th className="px-2 py-2 text-left font-medium">Valor Total</th>
+                  <th className="px-2 py-2 text-left font-medium">Ganancia</th>
+                  <th className="px-2 py-2 text-left font-medium">Compra</th>
+                  <th className="px-2 py-2 text-left font-medium">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
                 {filteredProducts.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell>{product.id}</TableCell>
-                    <TableCell>{product.name}</TableCell>
-                    <TableCell>{product.category}</TableCell>
-                    <TableCell>{product.brand}</TableCell>
-                    <TableCell>{product.stock}</TableCell>
-                    <TableCell>{product.minStock}</TableCell>
-                    <TableCell>{product.estado}</TableCell>
-                    <TableCell style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_caja ?? product.priceBox) || 0).toFixed(2)}</TableCell>
-                    <TableCell style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {((product.precio_compra ?? product.purchasePrice) || 0).toFixed(2)}</TableCell>
-                    <TableCell style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_unitario ?? product.priceUnit) || 0).toFixed(2)}</TableCell>
-                    <TableCell style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {((product.precio_blister ?? product.priceBlister) || 0).toFixed(2)}</TableCell>
-                    <TableCell style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_caja_venta ?? product.priceBox) || 0).toFixed(2)}</TableCell>
-                    <TableCell>{product.unidades_blister ?? product.unitsPerBlister ?? 0}</TableCell>
-                    <TableCell>{product.blisters_caja ?? product.blistersPerBox ?? 0}</TableCell>
-                    <TableCell>{product.vencimiento ?? product.expiry}</TableCell>
-                    <TableCell>{product.ubicacion ?? product.location}</TableCell>
-                    <TableCell>{product.estante ?? product.shelf}</TableCell>
-                    <TableCell>S/ {((product.valor_total ?? product.stock * ((product.precio_compra ?? product.purchasePrice) || 0)) || 0).toFixed(2)}</TableCell>
-                    <TableCell>S/ {(product.ganancia ?? 0).toFixed(2)}</TableCell>
-                    <TableCell>S/ {((product.compra ?? product.purchasePrice) || 0).toFixed(2)}</TableCell>
-                    <TableCell>
+                  <tr key={product.id} className="border-t">
+                    <td className="px-2 py-2">{product.id}</td>
+                    <td className="px-2 py-2">{product.name}</td>
+                    <td className="px-2 py-2">{product.category}</td>
+                    <td className="px-2 py-2">{product.brand}</td>
+                    <td className="px-2 py-2">{product.stock}</td>
+                    <td className="px-2 py-2">{product.minStock}</td>
+                    <td className="px-2 py-2">{product.estado}</td>
+                    <td className="px-2 py-2" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_caja ?? product.priceBox) || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {((product.precio_compra ?? product.purchasePrice) || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_unitario ?? product.priceUnit) || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {((product.precio_blister ?? product.priceBlister) || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_caja_venta ?? product.priceBox) || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2">{product.unidades_blister ?? product.unitsPerBlister ?? 0}</td>
+                    <td className="px-2 py-2">{product.blisters_caja ?? product.blistersPerBox ?? 0}</td>
+                    <td className="px-2 py-2">{product.vencimiento ?? product.expiry}</td>
+                    <td className="px-2 py-2">{product.ubicacion ?? product.location}</td>
+                    <td className="px-2 py-2">{product.estante ?? product.shelf}</td>
+                    <td className="px-2 py-2">S/ {((product.valor_total ?? product.stock * ((product.precio_compra ?? product.purchasePrice) || 0)) || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2">S/ {(product.ganancia ?? 0).toFixed(2)}</td>
+                    <td className="px-2 py-2">S/ {((product.compra ?? product.purchasePrice) || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2">
                       {isVendedor ? (
                         <Lock className="h-4 w-4 text-muted-foreground" />
                       ) : (
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button 
-                              size="sm" 
-                              variant="ghost"
-                              onClick={() => setEditingProduct(product)}
-                              style={{ color: '#D5B888' }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle style={{ color: '#D5B888' }}>Editar Producto</DialogTitle>
-                            </DialogHeader>
-                            {editingProduct && (
-                              <div className="space-y-4">
-                                <div>
-                                  <Label style={{ color: '#9AAD97', fontWeight: 'bold' }}>Stock</Label>
-                                  <Input
-                                    type="number"
-                                    value={editingProduct.stock}
-                                    onChange={(e) => setEditingProduct({
-                                      ...editingProduct,
-                                      stock: parseInt(e.target.value) || 0
-                                    })}
-                                  />
-                                </div>
-                                <div>
-                                  <Label style={{ color: '#D5B888', fontWeight: 'bold' }}>Precio Unitario</Label>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={editingProduct.priceUnit}
-                                    onChange={(e) => setEditingProduct({
-                                      ...editingProduct,
-                                      priceUnit: parseFloat(e.target.value) || 0
-                                    })}
-                                  />
-                                </div>
-                                <Button className="w-full" onClick={handleUpdateProduct} style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}>
-                                  Actualizar Producto
-                                </Button>
-                              </div>
-                            )}
-                          </DialogContent>
-                        </Dialog>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingProduct(product);
+                            setEditDialogOpen(true);
+                          }}
+                          style={{ color: '#D5B888' }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
                       )}
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
           </div>
         </CardContent>
       </Card>
+
+      {/* Edit Product Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={(open) => {
+        if (!open) { setEditDialogOpen(false); setEditingProduct(null); }
+      }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#D5B888' }}>Editar Producto</DialogTitle>
+            <DialogDescription>Modifique los campos del producto.</DialogDescription>
+          </DialogHeader>
+          {editingProduct && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label style={{ color: '#9AAD97' }}>Código</Label>
+                  <Input value={editingProduct.code} onChange={(e) => setEditingProduct({...editingProduct, code: e.target.value})} />
+                </div>
+                <div className="col-span-2">
+                  <Label style={{ color: '#D5B888' }}>Nombre</Label>
+                  <Input value={editingProduct.name} onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label style={{ color: '#9AAD97' }}>Marca</Label>
+                  <Input value={editingProduct.brand} onChange={(e) => setEditingProduct({...editingProduct, brand: e.target.value})} />
+                </div>
+                <div>
+                  <Label style={{ color: '#9AAD97' }}>Categoría</Label>
+                  <Input value={editingProduct.category} onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})} />
+                </div>
+                <div>
+                  <Label style={{ color: '#D5B888' }}>Estante</Label>
+                  <Input value={editingProduct.shelf} onChange={(e) => setEditingProduct({...editingProduct, shelf: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label style={{ color: '#9AAD97' }}>Stock</Label>
+                  <Input type="number" value={editingProduct.stock} onChange={(e) => setEditingProduct({...editingProduct, stock: parseInt(e.target.value) || 0})} />
+                </div>
+                <div>
+                  <Label style={{ color: '#D5B888' }}>Stock Mínimo</Label>
+                  <Input type="number" value={editingProduct.minStock} onChange={(e) => setEditingProduct({...editingProduct, minStock: parseInt(e.target.value) || 0})} />
+                </div>
+                <div>
+                  <Label style={{ color: '#9AAD97' }}>Vencimiento (MM/YYYY)</Label>
+                  <Input value={editingProduct.expiry} onChange={(e) => setEditingProduct({...editingProduct, expiry: e.target.value})} placeholder="MM/YYYY" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label style={{ color: '#D5B888' }}>Precio Compra</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
+                    <Input type="number" step="0.01" value={editingProduct.purchasePrice} onChange={(e) => setEditingProduct({...editingProduct, purchasePrice: parseFloat(e.target.value) || 0})} className="pl-10" />
+                  </div>
+                </div>
+                <div>
+                  <Label style={{ color: '#9AAD97' }}>Precio Unitario</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
+                    <Input type="number" step="0.01" value={editingProduct.priceUnit} onChange={(e) => setEditingProduct({...editingProduct, priceUnit: parseFloat(e.target.value) || 0})} className="pl-10" />
+                  </div>
+                </div>
+                <div>
+                  <Label style={{ color: '#D5B888' }}>Precio Blíster</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
+                    <Input type="number" step="0.01" value={editingProduct.priceBlister} onChange={(e) => setEditingProduct({...editingProduct, priceBlister: parseFloat(e.target.value) || 0})} className="pl-10" />
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label style={{ color: '#9AAD97' }}>Precio Caja</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
+                    <Input type="number" step="0.01" value={editingProduct.priceBox} onChange={(e) => setEditingProduct({...editingProduct, priceBox: parseFloat(e.target.value) || 0})} className="pl-10" />
+                  </div>
+                </div>
+                <div>
+                  <Label style={{ color: '#D5B888' }}>Uds/Blíster</Label>
+                  <Input type="number" value={editingProduct.unitsPerBlister} onChange={(e) => setEditingProduct({...editingProduct, unitsPerBlister: parseInt(e.target.value) || 0})} />
+                </div>
+                <div>
+                  <Label style={{ color: '#9AAD97' }}>Blísters/Caja</Label>
+                  <Input type="number" value={editingProduct.blistersPerBox} onChange={(e) => setEditingProduct({...editingProduct, blistersPerBox: parseInt(e.target.value) || 0})} />
+                </div>
+              </div>
+              <div>
+                <Label style={{ color: '#9AAD97' }}>Ubicación</Label>
+                <Input value={editingProduct.location} onChange={(e) => setEditingProduct({...editingProduct, location: e.target.value})} placeholder="Ej: Estante A1, Fila 2" />
+              </div>
+              <Button 
+                className="w-full" 
+                onClick={handleUpdateProduct}
+                disabled={saveLoading}
+                style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
+              >
+                {saveLoading ? 'Guardando...' : 'Guardar Cambios'}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

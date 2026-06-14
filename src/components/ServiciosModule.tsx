@@ -1059,10 +1059,12 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Métodos de Pago</p>
-                <p className="text-sm mt-1">
-                  <span style={{ color: '#9AAD97' }} className="font-semibold">E: S/{revenueByPaymentMethod.efectivo.toFixed(2)} </span>
-                  <span style={{ color: '#D5B888' }} className="font-semibold">T: S/{revenueByPaymentMethod.tarjeta.toFixed(2)}</span>
-                </p>
+                <div className="flex flex-wrap gap-2 mt-1 text-xs">
+                  <span style={{ color: '#9AAD97' }} className="font-semibold">E: S/{revenueByPaymentMethod.efectivo.toFixed(2)}</span>
+                  <span style={{ color: '#D5B888' }} className="font-semibold">Y: S/{revenueByPaymentMethod.yape.toFixed(2)}</span>
+                  <span style={{ color: '#6366f1' }} className="font-semibold">T: S/{revenueByPaymentMethod.tarjeta.toFixed(2)}</span>
+                  <span style={{ color: '#8b5cf6' }} className="font-semibold">Trans: S/{revenueByPaymentMethod.transferencia.toFixed(2)}</span>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -1086,7 +1088,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
           {availableServices.length === 0 ? (
             <p className="text-muted-foreground text-center py-4">No hay servicios registrados.</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
               {availableServices.map((service) => (
                 <div
                   key={service.idservicio}
