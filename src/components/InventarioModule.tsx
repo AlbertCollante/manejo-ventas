@@ -867,21 +867,21 @@ export function InventarioModule() {
       <Dialog open={editDialogOpen} onOpenChange={(open) => {
         if (!open) { setEditDialogOpen(false); setEditingProduct(null); }
       }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle style={{ color: '#D5B888' }}>Editar Producto</DialogTitle>
             <DialogDescription>Modifique los campos del producto.</DialogDescription>
           </DialogHeader>
           {editingProduct && (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                <div style={{ width: '30%' }}>
                   <Label style={{ color: '#9AAD97' }}>Código</Label>
                   <Input value={editingProduct.code} onChange={(e) => setEditingProduct({...editingProduct, code: e.target.value})} />
                 </div>
-                <div className="col-span-2">
+                <div style={{ flex: 1 }}>
                   <Label style={{ color: '#D5B888' }}>Nombre</Label>
-                  <Input value={editingProduct.name} onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})} />
+                  <Input value={editingProduct.name} onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})} style={{ width: '100%' }} />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
