@@ -575,7 +575,13 @@ export function InventarioModule() {
                         type="number" 
                         placeholder="100" 
                         value={newProduct.stock_actual}
-                        onChange={(e) => setNewProduct({...newProduct, stock_actual: parseInt(e.target.value) || 0})}
+                        onChange={(e) => {
+                          const newStock = parseInt(e.target.value) || 0;
+                          const calcPrecioCompra = newStock > 0 && newProduct.precio_caja > 0
+                            ? Math.round((newProduct.precio_caja / newStock) * 100) / 100
+                            : newProduct.precio_compra;
+                          setNewProduct({...newProduct, stock_actual: newStock, precio_compra: calcPrecioCompra});
+                        }}
                       />
                     </div>
                     <div>
@@ -646,7 +652,7 @@ export function InventarioModule() {
                       </div>
                     </div>
                     <div>
-                      <Label style={{ color: '#D5B888' }}>Precio Caja *</Label>
+                      <Label style={{ color: '#D5B888' }}>Precio Caja Compra *</Label>
                       <div className="relative mt-2">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                         <Input 
@@ -654,7 +660,13 @@ export function InventarioModule() {
                           step="0.01" 
                           placeholder="0.00" 
                           value={newProduct.precio_caja}
-                          onChange={(e) => setNewProduct({...newProduct, precio_caja: parseFloat(e.target.value) || 0})}
+                          onChange={(e) => {
+                            const newPrecioCaja = parseFloat(e.target.value) || 0;
+                            const calcPrecioCompra = newPrecioCaja > 0 && newProduct.stock_actual > 0
+                              ? Math.round((newPrecioCaja / newProduct.stock_actual) * 100) / 100
+                              : newProduct.precio_compra;
+                            setNewProduct({...newProduct, precio_caja: newPrecioCaja, precio_compra: calcPrecioCompra});
+                          }}
                           className="pl-10"
                         />
                       </div>
@@ -901,7 +913,13 @@ export function InventarioModule() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label style={{ color: '#9AAD97' }}>Stock</Label>
-                  <Input type="number" value={editingProduct.stock} onChange={(e) => setEditingProduct({...editingProduct, stock: parseInt(e.target.value) || 0})} />
+                  <Input type="number" value={editingProduct.stock} onChange={(e) => {
+                    const newStock = parseInt(e.target.value) || 0;
+                    const calcPurchasePrice = newStock > 0 && editingProduct.priceBox > 0
+                      ? Math.round((editingProduct.priceBox / newStock) * 100) / 100
+                      : editingProduct.purchasePrice;
+                    setEditingProduct({...editingProduct, stock: newStock, purchasePrice: calcPurchasePrice});
+                  }} />
                 </div>
                 <div>
                   <Label style={{ color: '#D5B888' }}>Stock Mínimo</Label>
@@ -937,10 +955,16 @@ export function InventarioModule() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label style={{ color: '#9AAD97' }}>Precio Caja</Label>
+                  <Label style={{ color: '#9AAD97' }}>Precio Caja Compra</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
-                    <Input type="number" step="0.01" value={editingProduct.priceBox} onChange={(e) => setEditingProduct({...editingProduct, priceBox: parseFloat(e.target.value) || 0})} className="pl-10" />
+                    <Input type="number" step="0.01" value={editingProduct.priceBox} onChange={(e) => {
+                      const newPriceBox = parseFloat(e.target.value) || 0;
+                      const calcPurchasePrice = newPriceBox > 0 && editingProduct.stock > 0
+                        ? Math.round((newPriceBox / editingProduct.stock) * 100) / 100
+                        : editingProduct.purchasePrice;
+                      setEditingProduct({...editingProduct, priceBox: newPriceBox, purchasePrice: calcPurchasePrice});
+                    }} className="pl-10" />
                   </div>
                 </div>
                 <div>

@@ -708,8 +708,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                     <ShoppingCart className="h-6 w-6 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Total Ventas</p>
-                    <p className="text-xl">S/ {totalVentas.toFixed(2)}</p>
+                    <p className="text-sm text-muted-foreground">Total Ingresos</p>
+                    <p className="text-xl">S/ {totalIngresos.toFixed(2)}</p>
                   </div>
                 </div>
               </CardContent>
@@ -930,48 +930,48 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                <div className="p-4 rounded-lg" style={{ borderTop: '4px solid #9AAD97', backgroundColor: 'rgba(154, 173, 151, 0.05)' }}>
                   <p className="text-sm text-muted-foreground">Cantidad de Ventas</p>
-                  <p className="text-2xl font-bold text-green-700">{ventasDelDia.length}</p>
+                  <p className="text-2xl font-bold" style={{ color: '#9AAD97' }}>{ventasDelDia.length}</p>
                 </div>
-                <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                <div className="p-4 rounded-lg" style={{ borderTop: '4px solid #9AAD97', backgroundColor: 'rgba(154, 173, 151, 0.05)' }}>
                   <p className="text-sm text-muted-foreground">Productos Vendidos</p>
-                  <p className="text-2xl font-bold text-green-700">
+                  <p className="text-2xl font-bold" style={{ color: '#9AAD97' }}>
                     {ventasDelDia.reduce((sum, v) => sum + (v.items?.length || 0), 0)}
                   </p>
                 </div>
-                <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-                  <p className="text-sm text-muted-foreground">Total Ventas</p>
-                  <p className="text-2xl font-bold text-green-700">S/ {totalVentas.toFixed(2)}</p>
+                <div className="p-4 rounded-lg" style={{ border: '2px solid #D5B888', backgroundColor: 'rgba(213, 184, 136, 0.25)', boxShadow: '0 2px 8px rgba(213, 184, 136, 0.3)' }}>
+                  <p className="text-sm" style={{ color: '#D5B888', fontWeight: 700 }}>Total Ventas</p>
+                  <p className="text-2xl font-bold" style={{ color: '#8B7A4E' }}>S/ {totalVentas.toFixed(2)}</p>
                 </div>
-                <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                <div className="p-4 rounded-lg" style={{ borderTop: '4px solid #9AAD97', backgroundColor: 'rgba(154, 173, 151, 0.05)' }}>
                   <p className="text-sm text-muted-foreground">Ticket Promedio</p>
-                  <p className="text-2xl font-bold text-blue-700">
+                  <p className="text-2xl font-bold" style={{ color: '#9AAD97' }}>
                     S/ {ventasDelDia.length > 0 ? (totalVentas / ventasDelDia.length).toFixed(2) : '0.00'}
                   </p>
                 </div>
               </div>
 
-              <p className="text-sm font-medium mb-3">Por Método de Pago</p>
+              <p className="text-sm font-medium mb-3" style={{ color: '#9AAD97' }}>Por Método de Pago</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="p-3 bg-green-50 rounded-lg">
+                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #9AAD97' }}>
                   <p className="text-xs text-muted-foreground">Efectivo</p>
-                  <p className="text-lg font-bold">S/ {ventasDelDia.filter(v => v.paymentMethod === "Efectivo").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
+                  <p className="text-base font-semibold" style={{ color: '#9AAD97' }}>S/ {ventasDelDia.filter(v => v.paymentMethod === "Efectivo").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Efectivo").length} ventas</p>
                 </div>
-                <div className="p-3 bg-purple-50 rounded-lg">
+                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #D5B888' }}>
                   <p className="text-xs text-muted-foreground">Yape</p>
-                  <p className="text-lg font-bold">S/ {ventasDelDia.filter(v => v.paymentMethod === "Yape").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
+                  <p className="text-base font-semibold" style={{ color: '#D5B888' }}>S/ {ventasDelDia.filter(v => v.paymentMethod === "Yape").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Yape").length} ventas</p>
                 </div>
-                <div className="p-3 bg-cyan-50 rounded-lg">
+                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #9AAD97' }}>
                   <p className="text-xs text-muted-foreground">Tarjeta</p>
-                  <p className="text-lg font-bold">S/ {ventasDelDia.filter(v => v.paymentMethod === "Tarjeta").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
+                  <p className="text-base font-semibold" style={{ color: '#9AAD97' }}>S/ {ventasDelDia.filter(v => v.paymentMethod === "Tarjeta").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Tarjeta").length} ventas</p>
                 </div>
-                <div className="p-3 bg-blue-50 rounded-lg">
+                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #D5B888' }}>
                   <p className="text-xs text-muted-foreground">Transferencia</p>
-                  <p className="text-lg font-bold">S/ {ventasDelDia.filter(v => v.paymentMethod === "Transferencia").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
+                  <p className="text-base font-semibold" style={{ color: '#D5B888' }}>S/ {ventasDelDia.filter(v => v.paymentMethod === "Transferencia").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Transferencia").length} ventas</p>
                 </div>
               </div>
@@ -984,42 +984,42 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+                <div className="p-4 rounded-lg" style={{ borderTop: '4px solid #9AAD97', backgroundColor: 'rgba(154, 173, 151, 0.05)' }}>
                   <p className="text-sm text-muted-foreground">Cantidad de Servicios</p>
-                  <p className="text-2xl font-bold text-purple-700">{serviciosDelDia.length}</p>
+                  <p className="text-2xl font-bold" style={{ color: '#9AAD97' }}>{serviciosDelDia.length}</p>
                 </div>
-                <div className="p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
-                  <p className="text-sm text-muted-foreground">Total Servicios</p>
-                  <p className="text-2xl font-bold text-purple-700">S/ {totalServicios.toFixed(2)}</p>
+                <div className="p-4 rounded-lg" style={{ border: '2px solid #D5B888', backgroundColor: 'rgba(213, 184, 136, 0.25)', boxShadow: '0 2px 8px rgba(213, 184, 136, 0.3)' }}>
+                  <p className="text-sm" style={{ color: '#D5B888', fontWeight: 700 }}>Total Servicios</p>
+                  <p className="text-2xl font-bold" style={{ color: '#8B7A4E' }}>S/ {totalServicios.toFixed(2)}</p>
                 </div>
-                <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                <div className="p-4 rounded-lg" style={{ borderTop: '4px solid #9AAD97', backgroundColor: 'rgba(154, 173, 151, 0.05)' }}>
                   <p className="text-sm text-muted-foreground">Ticket Promedio</p>
-                  <p className="text-2xl font-bold text-blue-700">
+                  <p className="text-2xl font-bold" style={{ color: '#9AAD97' }}>
                     S/ {serviciosDelDia.length > 0 ? (totalServicios / serviciosDelDia.length).toFixed(2) : '0.00'}
                   </p>
                 </div>
               </div>
 
-              <p className="text-sm font-medium mb-3">Por Método de Pago</p>
+              <p className="text-sm font-medium mb-3" style={{ color: '#9AAD97' }}>Por Método de Pago</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="p-3 bg-green-50 rounded-lg">
+                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #9AAD97' }}>
                   <p className="text-xs text-muted-foreground">Efectivo</p>
-                  <p className="text-lg font-bold">S/ {serviciosDelDia.filter(s => s.paymentMethod === "Efectivo").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
+                  <p className="text-base font-semibold" style={{ color: '#9AAD97' }}>S/ {serviciosDelDia.filter(s => s.paymentMethod === "Efectivo").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Efectivo").length} servicios</p>
                 </div>
-                <div className="p-3 bg-purple-50 rounded-lg">
+                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #D5B888' }}>
                   <p className="text-xs text-muted-foreground">Yape</p>
-                  <p className="text-lg font-bold">S/ {serviciosDelDia.filter(s => s.paymentMethod === "Yape").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
+                  <p className="text-base font-semibold" style={{ color: '#D5B888' }}>S/ {serviciosDelDia.filter(s => s.paymentMethod === "Yape").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Yape").length} servicios</p>
                 </div>
-                <div className="p-3 bg-cyan-50 rounded-lg">
+                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #9AAD97' }}>
                   <p className="text-xs text-muted-foreground">Tarjeta</p>
-                  <p className="text-lg font-bold">S/ {serviciosDelDia.filter(s => s.paymentMethod === "Tarjeta").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
+                  <p className="text-base font-semibold" style={{ color: '#9AAD97' }}>S/ {serviciosDelDia.filter(s => s.paymentMethod === "Tarjeta").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Tarjeta").length} servicios</p>
                 </div>
-                <div className="p-3 bg-blue-50 rounded-lg">
+                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #D5B888' }}>
                   <p className="text-xs text-muted-foreground">Transferencia</p>
-                  <p className="text-lg font-bold">S/ {serviciosDelDia.filter(s => s.paymentMethod === "Transferencia").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
+                  <p className="text-base font-semibold" style={{ color: '#D5B888' }}>S/ {serviciosDelDia.filter(s => s.paymentMethod === "Transferencia").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Transferencia").length} servicios</p>
                 </div>
               </div>
