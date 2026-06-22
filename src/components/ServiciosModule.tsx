@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Search, Plus, Activity, Download, Trash2 } from "lucide-react";
+import { Search, Plus, Activity, Download, Trash2, Pencil } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Label } from "./ui/label";
@@ -56,11 +56,25 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
   const [newServiceData, setNewServiceData] = useState({
     descripcion: "",
     precio: "",
-    duracion: ""
+    duracion: "",
+    estado: "ACT"
   });
   const [newServiceProducts, setNewServiceProducts] = useState<any[]>([]);
   const [newServiceSearchProduct, setNewServiceSearchProduct] = useState("");
   const [newServiceHoveredProduct, setNewServiceHoveredProduct] = useState<number | null>(null);
+
+  // Estados para editar servicio
+  const [showEditServiceDialog, setShowEditServiceDialog] = useState(false);
+  const [editingService, setEditingService] = useState<any>(null);
+  const [editServiceData, setEditServiceData] = useState({
+    descripcion: "",
+    precio: "",
+    duracion: "",
+    estado: "ACT"
+  });
+  const [editServiceProducts, setEditServiceProducts] = useState<any[]>([]);
+  const [editServiceSearchProduct, setEditServiceSearchProduct] = useState("");
+  const [showCancelled, setShowCancelled] = useState(false);
 
   // Cargar productos del inventario
   const loadProducts = async () => {
@@ -119,7 +133,8 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
             precio_de_aplicacion: Number(s.precio_de_aplicacion ?? s.precio ?? 0),
             duracion: s.duracion ?? '',
             productos: productos,
-            total: Number(s.total ?? 0)
+            total: Number(s.total ?? 0),
+            estado: s.estado ?? 'ACT'
           };
         });
         setAvailableServices(normalized);
@@ -528,7 +543,74 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
     }
   };
 
-  // Generar PDF del servicio
+  // Abrir diálogo de edición
+  const handleOpenEditDialog = (service: any) => {
+    setEditingService(service);
+    setEditServiceData({
+      descripcion: service.descripcion || '',
+      precio: String(service.precio || ''),
+      duracion: service.duracion || '',
+      estado: service.estado || 'ACT'
+    });
+
+    // Cargar productos asociados al servicio
+    const productIds = service.productos || [];
+    const productsWithDetails = productIds.map((prodId: number) => {
+      const product = products.find(p => p.idproducto === prodId);
+      if (product) {
+        return {
+          idproducto: product.idproducto,
+          nombre: product.nombre || product.name,
+          precio: product.precio_unitario,
+          cantidad: 1
+        };
+      }
+      return null;
+    }).filter(Boolean);
+
+    setEditServiceProducts(productsWithDetails);
+    setShowEditServiceDialog(true);
+  };
+
+  // Editar servicio
+  const handleEditService = async () => {
+    if (!editingService) return;
+    if (!editServiceData.descripcion) {
+      alert('La descripción es requerida');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const productIds = editServiceProducts.map(p => p.idproducto);
+
+      const response = await fetch(`${API_BASE}/editar-servicio/${editingService.idservicio}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          descripcion: editServiceData.descripcion,
+          precio: Number(editServiceData.precio) || 0,
+          duracion: editServiceData.duracion || '',
+          productos: productIds,
+          precio_de_aplicacion: Number(editServiceData.precio) || 0,
+          estado: editServiceData.estado
+        })
+      });
+
+      if (!response.ok) throw new Error('Error al actualizar servicio');
+
+      alert('Servicio actualizado correctamente');
+      setShowEditServiceDialog(false);
+      setEditingService(null);
+      await loadAvailableServices();
+    } catch (err) {
+      console.error('Error editando servicio:', err);
+      alert('Error al actualizar el servicio');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const generateServicePDF = (serviceData: any) => {
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -1089,7 +1171,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
             <p className="text-muted-foreground text-center py-4">No hay servicios registrados.</p>
           ) : (
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-              {availableServices.map((service) => (
+              {availableServices.filter(s => s.estado === 'ACT').map((service) => (
                 <div
                   key={service.idservicio}
                   className="border rounded-lg p-4 hover:shadow-md transition-all cursor-pointer"
@@ -1105,17 +1187,302 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                       </p>
                     )}
                     <div className="mt-auto pt-2 border-t">
-                      <p className="text-lg font-bold" style={{ color: '#D5B888' }}>
-                        S/ {(Number(service.precio) || 0).toFixed(2)}
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-lg font-bold" style={{ color: '#D5B888' }}>
+                          S/ {(Number(service.precio) || 0).toFixed(2)}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleOpenEditDialog(service)}
+                          style={{ color: '#9AAD97' }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           )}
+          <button
+            onClick={() => setShowCancelled(!showCancelled)}
+            className="mt-3 text-xs hover:underline"
+            style={{ color: '#9AAD97' }}
+          >
+            {showCancelled ? 'Ocultar cancelados' : 'Ver cancelados'}
+          </button>
+          {showCancelled && (
+            <div className="mt-4">
+              <h4 className="text-sm font-semibold mb-2" style={{ color: '#9AAD97' }}>Servicios de baja</h4>
+              {availableServices.filter(s => s.estado === 'CAN').length === 0 ? (
+                <p className="text-sm text-muted-foreground">No hay servicios cancelados</p>
+              ) : (
+                <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                  {availableServices.filter(s => s.estado === 'CAN').map((service) => (
+                    <div
+                      key={service.idservicio}
+                      className="border rounded-lg p-4 hover:shadow-md transition-all cursor-pointer opacity-60"
+                      style={{ borderColor: '#9AAD97', backgroundColor: 'rgba(154, 173, 151, 0.05)' }}
+                    >
+                      <div className="flex flex-col h-full">
+                        <h4 className="font-semibold text-sm mb-2 line-clamp-2" style={{ color: '#9AAD97' }}>
+                          {service.descripcion}
+                        </h4>
+                        {service.duracion && (
+                          <p className="text-xs text-muted-foreground mb-2">
+                            Duración: {service.duracion}
+                          </p>
+                        )}
+                        <div className="mt-auto pt-2 border-t">
+                          <div className="flex items-center justify-between">
+                            <p className="text-lg font-bold" style={{ color: '#9AAD97' }}>
+                              S/ {(Number(service.precio) || 0).toFixed(2)}
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleOpenEditDialog(service)}
+                              style={{ color: '#9AAD97' }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Diálogo de Edición de Servicio */}
+      <Dialog open={showEditServiceDialog} onOpenChange={setShowEditServiceDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#9AAD97' }}>Editar Servicio</DialogTitle>
+          </DialogHeader>
+          {editingService && (
+            <div className="space-y-4">
+              <div>
+                <Label>Descripción</Label>
+                <Input
+                  placeholder="Nombre del servicio"
+                  value={editServiceData.descripcion}
+                  onChange={(e) => setEditServiceData({ ...editServiceData, descripcion: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Precio</Label>
+                <Input
+                  type="number"
+                  placeholder="Precio del servicio"
+                  value={editServiceData.precio}
+                  onChange={(e) => setEditServiceData({ ...editServiceData, precio: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Duración (opcional)</Label>
+                <Input
+                  placeholder="Ej: 30 min"
+                  value={editServiceData.duracion}
+                  onChange={(e) => setEditServiceData({ ...editServiceData, duracion: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Estado</Label>
+                <Select
+                  value={editServiceData.estado}
+                  onValueChange={(value) => setEditServiceData({ ...editServiceData, estado: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACT">Activo</SelectItem>
+                    <SelectItem value="CAN">De baja</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Product Selection for Edit */}
+              <div className="border-t pt-4">
+                <h4 style={{ color: '#9AAD97' }} className="font-semibold mb-2">Productos utilizados en este servicio</h4>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Busque productos del inventario para asociarlos al servicio.
+                </p>
+                <div className="relative mb-3">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nombre, código o marca..."
+                    value={editServiceSearchProduct}
+                    onChange={(e) => setEditServiceSearchProduct(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+
+                {editServiceSearchProduct.trim().length >= 2 && (
+                  <div className="space-y-2 max-h-[180px] overflow-y-auto mb-3">
+                  {products.filter(p => {
+                    const term = editServiceSearchProduct.toLowerCase();
+                    return (
+                      (p.nombre || '').toLowerCase().includes(term) ||
+                      (p.codigo || '').toLowerCase().includes(term) ||
+                      (p.marca || '').toLowerCase().includes(term)
+                    );
+                  }).slice(0, 5).map((product) => {
+                    const inCartQty = editServiceProducts.find(p => p.idproducto === product.idproducto)?.cantidad || 0;
+                    const available = Math.max(0, Number(product.stock ?? 0) - inCartQty);
+
+                    return (
+                      <div
+                        key={product.idproducto}
+                        onMouseEnter={() => setHoveredProductId(product.idproducto)}
+                        onMouseLeave={() => setHoveredProductId(null)}
+                        className="flex items-center justify-between p-3 border rounded-lg transition-all"
+                        style={{
+                          backgroundColor: hoveredProductId === product.idproducto ? '#9AAD97' : 'transparent',
+                          color: hoveredProductId === product.idproducto ? 'white' : 'inherit',
+                          borderColor: hoveredProductId === product.idproducto ? '#9AAD97' : 'inherit'
+                        }}
+                      >
+                        <div className="flex-1 min-w-0 pr-3">
+                          <p className="text-sm font-medium truncate">
+                            {product.nombre || product.name}
+                          </p>
+                          <p
+                            className="text-xs"
+                            style={{
+                              color: hoveredProductId === product.idproducto
+                                ? 'rgba(255,255,255,0.85)'
+                                : '#999'
+                            }}
+                          >
+                            Código: {product.codigo || product.code} | Stock: {product.stock}
+                            {inCartQty > 0 ? ` | En selección: ${inCartQty}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <p
+                            className="text-sm font-bold"
+                            style={{
+                              color: hoveredProductId === product.idproducto ? 'white' : '#D5B888'
+                            }}
+                          >
+                            S/ {(product.precio_unitario || 0).toFixed(2)}
+                          </p>
+                          <Button
+                            size="sm"
+                            disabled={available <= 0}
+                            onClick={() => {
+                              const existing = editServiceProducts.find(p => p.idproducto === product.idproducto);
+                              if (existing) {
+                                setEditServiceProducts(editServiceProducts.map(p =>
+                                  p.idproducto === product.idproducto
+                                    ? { ...p, cantidad: p.cantidad + 1 }
+                                    : p
+                                ));
+                              } else {
+                                setEditServiceProducts([...editServiceProducts, {
+                                  ...product,
+                                  idproducto: product.idproducto,
+                                  nombre: product.nombre || product.name,
+                                  precio: product.precio_unitario,
+                                  cantidad: 1
+                                }]);
+                              }
+                              setEditServiceSearchProduct("");
+                            }}
+                            style={{
+                              backgroundColor: '#D5B888',
+                              color: 'white',
+                              border: 'none'
+                            }}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Agregar
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  </div>
+                )}
+
+                {editServiceProducts.length > 0 && (
+                  <div className="rounded-lg border p-3 space-y-2" style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}>
+                    <p className="text-sm font-semibold" style={{ color: '#9AAD97' }}>
+                      Productos seleccionados ({editServiceProducts.length})
+                    </p>
+                    {editServiceProducts.map((item) => (
+                      <div key={item.idproducto} className="flex items-center gap-2 p-2 bg-white border rounded">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{item.nombre}</p>
+                          <p className="text-xs text-muted-foreground">
+                            S/ {(item.precio || 0).toFixed(2)} c/u
+                          </p>
+                        </div>
+                        <p className="text-sm font-semibold w-20 text-right" style={{ color: '#D5B888' }}>
+                          S/ {((item.precio || 0) * (item.cantidad || 0)).toFixed(2)}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            setEditServiceProducts(editServiceProducts.filter(p => p.idproducto !== item.idproducto));
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center pt-2 border-t">
+                      <span className="text-sm font-semibold">Precio:</span>
+                      <span className="text-sm" style={{ color: '#9AAD97' }}>
+                        S/ {Number(editServiceData.precio || 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-semibold">Productos:</span>
+                      <span className="text-sm" style={{ color: '#D5B888' }}>
+                        S/ {editServiceProducts.reduce((sum, p) => sum + (p.precio || 0) * (p.cantidad || 0), 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t" style={{ backgroundColor: 'rgba(154, 173, 151, 0.15)' }}>
+                      <span className="font-semibold" style={{ color: '#9AAD97' }}>TOTAL:</span>
+                      <span className="font-bold" style={{ color: '#D5B888' }}>
+                        S/ {(Number(editServiceData.precio || 0) + editServiceProducts.reduce((sum, p) => sum + (p.precio || 0) * (p.cantidad || 0), 0)).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowEditServiceDialog(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleEditService}
+                  disabled={loading}
+                  style={{ backgroundColor: '#D5B888', color: 'white', border: 'none' }}
+                >
+                  {loading ? 'Guardando...' : 'Guardar Cambios'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Tabla de Servicios Registrados */}
       <Card style={{ borderTop: '4px solid #D5B888' }}>
