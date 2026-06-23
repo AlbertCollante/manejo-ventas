@@ -1181,11 +1181,6 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                     <h4 className="font-semibold text-sm mb-2 line-clamp-2" style={{ color: '#9AAD97' }}>
                       {service.descripcion}
                     </h4>
-                    {service.duracion && (
-                      <p className="text-xs text-muted-foreground mb-2">
-                        Duración: {service.duracion}
-                      </p>
-                    )}
                     <div className="mt-auto pt-2 border-t">
                       <div className="flex items-center justify-between">
                         <p className="text-lg font-bold" style={{ color: '#D5B888' }}>
