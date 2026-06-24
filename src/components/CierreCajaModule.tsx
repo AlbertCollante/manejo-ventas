@@ -50,6 +50,13 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
 
   const API_BASE = 'http://localhost:9000';
 
+  const toLocalISODate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const mapApiClosureToCierreCaja = (item: any): CierreCaja => {
     const efectivo = Number(item.efectivo ?? 0);
     const yape = Number(item.yape ?? 0);
@@ -61,7 +68,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     const rawFecha = item.fecha_hora || new Date().toISOString();
     const parsedDate = new Date(rawFecha);
     let fecha = String(rawFecha);
-    
+
     if (!isNaN(parsedDate.getTime())) {
       const dateStr = parsedDate.toLocaleDateString('es-PE');
       const timeStr = parsedDate.toLocaleTimeString('es-PE');
@@ -71,7 +78,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     return {
       id: Number(item.id),
       fecha,
-      fechaIso: !isNaN(parsedDate.getTime()) ? parsedDate.toISOString().split('T')[0] : '',
+      fechaIso: !isNaN(parsedDate.getTime()) ? toLocalISODate(parsedDate) : '',
       usuario: item.usuario || '',
       montoInicial: 0,
       totalVentas: total,
