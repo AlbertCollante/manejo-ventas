@@ -30,10 +30,17 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const [activeTab, setActiveTab] = useState("actual");
   
   // Para reportes de rango de fechas
-  const [fechaInicio, setFechaInicio] = useState("");
-  const [fechaFin, setFechaFin] = useState("");
-  const [cierresHistorico, setCierresHistorico] = useState<CierreCaja[]>([]);
   const [allCierres, setAllCierres] = useState<CierreCaja[]>([]);
+
+  // Estado independiente para reporte por fechas
+  const [reporteFechaInicio, setReporteFechaInicio] = useState("");
+  const [reporteFechaFin, setReporteFechaFin] = useState("");
+  const [cajasReporte, setCajasReporte] = useState<CierreCaja[]>([]);
+  const [cajasSeleccionadas, setCajasSeleccionadas] = useState<number[]>([]);
+  const [ventasReporte, setVentasReporte] = useState<any[]>([]);
+  const [serviciosReporte, setServiciosReporte] = useState<any[]>([]);
+  const [loadingReporte, setLoadingReporte] = useState(false);
+
   const [ventasDelDia, setVentasDelDia] = useState<any[]>([]);
   const [serviciosDelDia, setServiciosDelDia] = useState<any[]>([]);
   const [montoInicial, setMontoInicial] = useState<number>(0);
@@ -64,6 +71,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     return {
       id: Number(item.id),
       fecha,
+      fechaIso: !isNaN(parsedDate.getTime()) ? parsedDate.toISOString().split('T')[0] : '',
       usuario: item.usuario || '',
       montoInicial: 0,
       totalVentas: total,
@@ -273,7 +281,6 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       const closures = Array.isArray(data)
         ? data.map(mapApiClosureToCierreCaja).sort((a, b) => b.id - a.id)
         : [];
-      setCierresHistorico(closures);
       setAllCierres(closures);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
@@ -532,104 +539,106 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     alert('Excel generado y descargado correctamente');
   };
 
-  const generarExcelReportePeriodo = () => {
-    // Crear workbook
-    const wb = XLSX.utils.book_new();
-    
-    // Hoja 1: Resumen del período
-    const resumenPeriodoData = [
-      ['REPORTE DE CIERRES DE CAJA - PERÍODO'],
-      [],
-      ['Fecha Inicio:', fechaInicio],
-      ['Fecha Fin:', fechaFin],
-      ['Total de Cierres:', cierresHistorico.length],
-      [],
-      ['RESUMEN FINANCIERO DEL PERÍODO'],
-      ['Concepto', 'Monto (S/)'],
-      ['Total Ventas General', totalGeneralHistorico.toFixed(2)],
-      ['Total Efectivo', totalEfectivoHistorico.toFixed(2)],
-      ['Total Yape', totalYapeHistorico.toFixed(2)],
-      ['Total Tarjeta', totalTarjetaHistorico.toFixed(2)],
-      ['Total Transferencia', totalTransferenciaHistorico.toFixed(2)],
-    ];
-
-    const wsResumen = XLSX.utils.aoa_to_sheet(resumenPeriodoData);
-    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
-
-    // Hoja 2: Detalle de cierres
-    const detalleHeaderData = [
-      ['DETALLE DE CIERRES DE CAJA'],
-      [],
-      ['Nro Caja', 'Fecha y Hora', 'Usuario', 'Efectivo (S/)', 'Yape (S/)', 'Tarjeta (S/)', 'Transferencia (S/)', 'Total (S/)', 'Diferencia (S/)'],
-    ];
-
-    const detalleBodyData = cierresHistorico.map(c => [
-      c.aperturaId,
-      c.fecha,
-      c.usuario,
-      c.montosContados.efectivo.toFixed(2),
-      c.montosContados.yape.toFixed(2),
-      c.montosContados.tarjeta.toFixed(2),
-      c.montosContados.transferencia.toFixed(2),
-      c.totalContado.toFixed(2),
-      c.diferencia.toFixed(2),
-    ]);
-
-    const detalleData = [...detalleHeaderData, ...detalleBodyData];
-    detalleData.push([]);
-    detalleData.push(['', 'TOTALES', '', 
-      totalEfectivoHistorico.toFixed(2),
-      totalYapeHistorico.toFixed(2),
-      totalTarjetaHistorico.toFixed(2),
-      totalTransferenciaHistorico.toFixed(2),
-      (totalEfectivoHistorico + totalYapeHistorico + totalTarjetaHistorico + totalTransferenciaHistorico).toFixed(2),
-      ''
-    ]);
-
-    const wsDetalle = XLSX.utils.aoa_to_sheet(detalleData);
-    XLSX.utils.book_append_sheet(wb, wsDetalle, "Cierres");
-
-    // Generar archivo
-    const nombreArchivo = `Reporte_Cierres_${fechaInicio}_${fechaFin}.xlsx`;
-    XLSX.writeFile(wb, nombreArchivo);
-
-    alert('Excel generado y descargado correctamente');
+  const resetearReporte = () => {
+    setReporteFechaInicio("");
+    setReporteFechaFin("");
+    setCajasReporte([]);
+    setCajasSeleccionadas([]);
+    setVentasReporte([]);
+    setServiciosReporte([]);
   };
 
-  const buscarCierresPorFecha = () => {
-    if (!fechaInicio || !fechaFin) {
+  const buscarCajasReporte = () => {
+    if (!reporteFechaInicio || !reporteFechaFin) {
       alert("Por favor seleccione ambas fechas");
       return;
     }
 
-    const filtered = allCierres.filter((cierre) => {
-      const closureDate = new Date(cierre.fecha);
-      if (!isNaN(closureDate.getTime())) {
-        const formatted = closureDate.toISOString().split('T')[0];
-        return formatted >= fechaInicio && formatted <= fechaFin;
+    const filtered = allCierres.filter(c => {
+      if (c.fechaIso) {
+        return c.fechaIso >= reporteFechaInicio && c.fechaIso <= reporteFechaFin;
       }
-
-      const [datePart] = cierre.fecha.split(' ');
-      const [day, month, year] = datePart.split('/');
-      if (!day || !month || !year) return false;
-      const closureDateFormatted = `${year}-${month}-${day}`;
-      return closureDateFormatted >= fechaInicio && closureDateFormatted <= fechaFin;
+      return false;
     });
 
-    setCierresHistorico(filtered);
+    setCajasReporte(filtered);
+    setCajasSeleccionadas([]);
+    setVentasReporte([]);
+    setServiciosReporte([]);
   };
 
-  const resetearReporte = () => {
-    setFechaInicio("");
-    setFechaFin("");
-    setCierresHistorico(allCierres);
+  const toggleCajaSeleccionada = (aperturaId: number) => {
+    setCajasSeleccionadas(prev => {
+      if (prev.includes(aperturaId)) {
+        return prev.filter(id => id !== aperturaId);
+      }
+      return [...prev, aperturaId];
+    });
   };
 
-  const totalGeneralHistorico = cierresHistorico.reduce((sum, c) => sum + c.totalVentas, 0);
-  const totalEfectivoHistorico = cierresHistorico.reduce((sum, c) => sum + c.montosContados.efectivo, 0);
-  const totalYapeHistorico = cierresHistorico.reduce((sum, c) => sum + c.montosContados.yape, 0);
-  const totalTarjetaHistorico = cierresHistorico.reduce((sum, c) => sum + c.montosContados.tarjeta, 0);
-  const totalTransferenciaHistorico = cierresHistorico.reduce((sum, c) => sum + c.montosContados.transferencia, 0);
+  const actualizarDatosReporte = async () => {
+    if (cajasSeleccionadas.length === 0) {
+      setVentasReporte([]);
+      setServiciosReporte([]);
+      return;
+    }
+
+    setLoadingReporte(true);
+    try {
+      const [ventasResp, serviciosResp] = await Promise.all([
+        fetch(`${API_BASE}/ventas`),
+        fetch(`${API_BASE}/servicios`)
+      ]);
+
+      const ventasData = ventasResp.ok ? await ventasResp.json() : [];
+      const serviciosData = serviciosResp.ok ? await serviciosResp.json() : [];
+
+      const normalizedVentas = Array.isArray(ventasData) ? ventasData.map(normalizeApiSale) : [];
+      const normalizedServicios = Array.isArray(serviciosData) ? serviciosData.map(normalizeApiService) : [];
+
+      const filteredVentas = normalizedVentas.filter(v => cajasSeleccionadas.includes(v.id_apertura));
+      const filteredServicios = normalizedServicios.filter(s => cajasSeleccionadas.includes(s.idapertura));
+
+      // Obtener detalle de productos de cada venta
+      const ventasConDetalles = await Promise.all(
+        filteredVentas.map(async (sale) => {
+          if (!sale.items || sale.items.length === 0) {
+            try {
+              const detailResp = await fetch(`${API_BASE}/detalle-venta`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idventa: sale.id })
+              });
+              if (detailResp.ok) {
+                const detailData = await detailResp.json();
+                const items = Array.isArray(detailData) ? detailData : (detailData.detalle || []);
+                return { ...sale, items };
+              }
+            } catch (e) {
+              console.error('Error obteniendo detalle de venta:', e);
+            }
+          }
+          return sale;
+        })
+      );
+
+      setVentasReporte(ventasConDetalles.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime()));
+      setServiciosReporte(filteredServicios.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime()));
+    } catch (err) {
+      console.error('Error cargando datos del reporte:', err);
+    } finally {
+      setLoadingReporte(false);
+    }
+  };
+
+  useEffect(() => {
+    actualizarDatosReporte();
+  }, [cajasSeleccionadas]);
+
+  // Totales del reporte por fechas/cajas seleccionadas
+  const totalVentasReporte = ventasReporte.reduce((sum, v) => sum + v.total, 0);
+  const totalServiciosReporte = serviciosReporte.reduce((sum, s) => sum + s.subtotal, 0);
+  const totalReporte = totalVentasReporte + totalServiciosReporte;
 
   // Verificar si el usuario es administrador
   const isAdmin = currentUser.role?.toLowerCase() === 'admin' || currentUser.role?.toLowerCase() === 'administrador';
@@ -1072,8 +1081,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {cierresHistorico.length > 0 ? (
-                      cierresHistorico.map((cierre) => (
+                    {allCierres.length > 0 ? (
+                      allCierres.map((cierre) => (
                         <TableRow key={cierre.id}>
                           <TableCell className="font-bold" style={{ color: '#9AAD97' }}>{cierre.aperturaId}</TableCell>
                           <TableCell className="text-sm">{cierre.fecha}</TableCell>
@@ -1111,7 +1120,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Reporte de Cierres por Rango de Fechas</CardTitle>
+              <CardTitle>Reporte por Rango de Fechas</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1119,8 +1128,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                   <Label>Fecha de Inicio</Label>
                   <Input
                     type="date"
-                    value={fechaInicio}
-                    onChange={(e) => setFechaInicio(e.target.value)}
+                    value={reporteFechaInicio}
+                    onChange={(e) => setReporteFechaInicio(e.target.value)}
                     className="mt-2"
                   />
                 </div>
@@ -1128,8 +1137,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                   <Label>Fecha de Fin</Label>
                   <Input
                     type="date"
-                    value={fechaFin}
-                    onChange={(e) => setFechaFin(e.target.value)}
+                    value={reporteFechaFin}
+                    onChange={(e) => setReporteFechaFin(e.target.value)}
                     className="mt-2"
                   />
                 </div>
@@ -1137,11 +1146,11 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
               <div className="flex gap-2">
                 <Button 
                   className="flex-1" 
-                  onClick={buscarCierresPorFecha}
+                  onClick={buscarCajasReporte}
                   style={{ backgroundColor: '#9AAD97', color: 'white' }}
                 >
                   <Calendar className="h-4 w-4 mr-2" />
-                  Buscar Cierres
+                  Buscar Cajas
                 </Button>
                 <Button 
                   variant="outline" 
@@ -1153,100 +1162,156 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
             </CardContent>
           </Card>
 
-          {cierresHistorico.length > 0 && (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Resumen del Período</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Total General</p>
-                      <p className="text-lg font-bold">S/ {totalGeneralHistorico.toFixed(2)}</p>
-                    </div>
-                    <div className="p-3 bg-green-50 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Total Efectivo</p>
-                      <p className="text-lg font-bold">S/ {totalEfectivoHistorico.toFixed(2)}</p>
-                    </div>
-                    <div className="p-3 bg-purple-50 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Total Yape</p>
-                      <p className="text-lg font-bold">S/ {totalYapeHistorico.toFixed(2)}</p>
-                    </div>
-                    <div className="p-3 bg-cyan-50 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Total Tarjeta</p>
-                      <p className="text-lg font-bold">S/ {totalTarjetaHistorico.toFixed(2)}</p>
-                    </div>
-                    <div className="p-3 bg-blue-100 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Total Transfer.</p>
-                      <p className="text-lg font-bold">S/ {totalTransferenciaHistorico.toFixed(2)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Detalle de Cierres en el Período</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Fecha y Hora</TableHead>
-                          <TableHead>Usuario</TableHead>
-                          <TableHead>Efectivo</TableHead>
-                          <TableHead>Yape</TableHead>
-                          <TableHead>Tarjeta</TableHead>
-                          <TableHead>Transferencia</TableHead>
-                          <TableHead>Total</TableHead>
-                          <TableHead>Diferencia</TableHead>
-                          <TableHead>Observaciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {cierresHistorico.map((cierre) => (
-                          <TableRow key={cierre.id}>
-                            <TableCell className="text-sm">{cierre.fecha}</TableCell>
-                            <TableCell>{cierre.usuario}</TableCell>
-                            <TableCell>S/ {cierre.montosContados.efectivo.toFixed(2)}</TableCell>
-                            <TableCell>S/ {cierre.montosContados.yape.toFixed(2)}</TableCell>
-                            <TableCell>S/ {cierre.montosContados.tarjeta.toFixed(2)}</TableCell>
-                            <TableCell>S/ {cierre.montosContados.transferencia.toFixed(2)}</TableCell>
-                            <TableCell className="font-semibold">S/ {cierre.totalContado.toFixed(2)}</TableCell>
-                            <TableCell>
-                              <Badge variant={cierre.diferencia >= 0 ? "default" : "destructive"}>
-                                {cierre.diferencia >= 0 ? '+' : ''} S/ {cierre.diferencia.toFixed(2)}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm">{cierre.observaciones || '-'}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="flex gap-2">
-                <Button className="flex-1" onClick={generarExcelReportePeriodo}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Descargar Excel
-                </Button>
-                <div className="flex-1 flex gap-2">
-                  <Input
-                    type="email"
-                    placeholder="correo@ejemplo.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                  <Button onClick={handleEnviarReporte}>
-                    <Send className="h-4 w-4 mr-2" />
-                    Enviar
-                  </Button>
+          {cajasReporte.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Seleccionar Cajas</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-3">
+                  {cajasReporte.map((cierre) => (
+                    <label
+                      key={cierre.id}
+                      className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors hover:bg-muted"
+                      style={{ borderColor: '#e5e7eb' }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={cajasSeleccionadas.includes(Number(cierre.aperturaId))}
+                        onChange={() => toggleCajaSeleccionada(Number(cierre.aperturaId))}
+                      />
+                      <div className="text-sm">
+                        <p className="font-medium" style={{ color: '#9AAD97' }}>Caja #{cierre.aperturaId}</p>
+                        <p className="text-xs text-muted-foreground">{cierre.fecha} - {cierre.usuario}</p>
+                      </div>
+                    </label>
+                  ))}
                 </div>
-              </div>
+                {cajasSeleccionadas.length > 0 && (
+                  <p className="text-xs mt-3" style={{ color: '#9AAD97' }}>
+                    {cajasSeleccionadas.length} caja(s) seleccionada(s)
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {cajasSeleccionadas.length > 0 && (
+            <>
+              <Card style={{ borderTop: '4px solid #D5B888' }}>
+                <CardHeader>
+                  <CardTitle style={{ color: '#D5B888' }}>Resumen de Ingresos</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-2 md:gap-4">
+                    <div className="p-2 md:p-4 rounded-lg" style={{ borderTop: '4px solid #9AAD97', backgroundColor: 'rgba(154, 173, 151, 0.05)' }}>
+                      <p className="text-[10px] md:text-sm text-muted-foreground truncate">Ventas</p>
+                      <p className="text-sm md:text-2xl font-bold" style={{ color: '#9AAD97' }}>S/ {totalVentasReporte.toFixed(2)}</p>
+                      <p className="text-[10px] text-muted-foreground">{ventasReporte.length}</p>
+                    </div>
+                    <div className="p-2 md:p-4 rounded-lg" style={{ borderTop: '4px solid #9AAD97', backgroundColor: 'rgba(154, 173, 151, 0.05)' }}>
+                      <p className="text-[10px] md:text-sm text-muted-foreground truncate">Servicios</p>
+                      <p className="text-sm md:text-2xl font-bold" style={{ color: '#9AAD97' }}>S/ {totalServiciosReporte.toFixed(2)}</p>
+                      <p className="text-[10px] text-muted-foreground">{serviciosReporte.length}</p>
+                    </div>
+                    <div className="p-2 md:p-4 rounded-lg" style={{ border: '2px solid #D5B888', backgroundColor: 'rgba(213, 184, 136, 0.25)', boxShadow: '0 2px 8px rgba(213, 184, 136, 0.3)' }}>
+                      <p className="text-[10px] md:text-sm" style={{ color: '#D5B888', fontWeight: 700 }}>Total</p>
+                      <p className="text-sm md:text-2xl font-bold" style={{ color: '#8B7A4E' }}>S/ {totalReporte.toFixed(2)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {loadingReporte ? (
+                <p className="text-center text-muted-foreground py-4">Cargando ventas y servicios...</p>
+              ) : (
+                <>
+                  <Card style={{ borderTop: '4px solid #9AAD97' }}>
+                    <CardHeader>
+                      <CardTitle style={{ color: '#9AAD97' }}>Productos Vendidos</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {ventasReporte.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-4">No hay ventas en las cajas seleccionadas</p>
+                      ) : (
+                        <div className="overflow-y-scroll max-h-[350px] space-y-2">
+                          {ventasReporte.map((v) => (
+                            <div key={v.id} className="border rounded-lg overflow-hidden" style={{ borderColor: '#e5e7eb' }}>
+                              <div className="flex flex-wrap items-center justify-between gap-2 p-2 text-xs" style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}>
+                                <div className="flex flex-wrap gap-2">
+                                  <span className="font-semibold" style={{ color: '#9AAD97' }}>Venta #{v.id}</span>
+                                  <span className="text-muted-foreground">{v.date}</span>
+                                  <span className="px-1.5 py-0.5 rounded border" style={{ borderColor: '#D5B888', color: '#D5B888' }}>{v.paymentMethod}</span>
+                                </div>
+                                <span className="font-bold" style={{ color: '#9AAD97' }}>S/ {v.total.toFixed(2)}</span>
+                              </div>
+                              <div className="p-2">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="text-muted-foreground">
+                                      <th className="text-left py-1">Prod.</th>
+                                      <th className="text-center py-1 w-10">Cant.</th>
+                                      <th className="text-right py-1 w-16">P.U.</th>
+                                      <th className="text-right py-1 w-16">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(v.items || []).map((item: any, idx: number) => (
+                                      <tr key={idx} className="border-b last:border-b-0 border-dashed" style={{ borderColor: '#f0f0f0' }}>
+                                        <td className="py-1 pr-1 truncate max-w-[120px] sm:max-w-[200px]">{item.nombre || item.name || item.producto || 'Producto'}</td>
+                                        <td className="py-1 text-center">{item.cantidad || item.quantity || 1}</td>
+                                        <td className="py-1 text-right">S/ {Number(item.precio_unitario || item.precio || item.price || 0).toFixed(2)}</td>
+                                        <td className="py-1 text-right font-medium">S/ {(Number(item.cantidad || item.quantity || 1) * Number(item.precio_unitario || item.precio || item.price || 0)).toFixed(2)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card style={{ borderTop: '4px solid #D5B888' }}>
+                    <CardHeader>
+                      <CardTitle style={{ color: '#D5B888' }}>Servicios</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {serviciosReporte.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-4">No hay servicios en las cajas seleccionadas</p>
+                      ) : (
+                        <div className="overflow-auto max-h-[400px]">
+                          <table className="w-full text-xs">
+                            <thead className="sticky top-0 bg-white">
+                              <tr>
+                                <th className="text-left p-1 border-b w-12" style={{ color: '#D5B888' }}>ID</th>
+                                <th className="text-left p-1 border-b w-28" style={{ color: '#9AAD97' }}>Fecha</th>
+                                <th className="text-left p-1 border-b" style={{ color: '#D5B888' }}>Descripción</th>
+                                <th className="text-left p-1 border-b w-16" style={{ color: '#9AAD97' }}>Método</th>
+                                <th className="text-right p-1 border-b w-16" style={{ color: '#D5B888' }}>Monto</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {serviciosReporte.map((s) => (
+                                <tr key={s.id} className="border-b last:border-b-0">
+                                  <td className="p-1">{s.id}</td>
+                                  <td className="p-1">{s.date}</td>
+                                  <td className="p-1 truncate max-w-[120px]">{s.description}</td>
+                                  <td className="p-1">{s.paymentMethod}</td>
+                                  <td className="p-1 text-right font-semibold">S/ {s.subtotal.toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </>
           )}
         </>

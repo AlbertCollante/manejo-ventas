@@ -50,6 +50,7 @@ export interface Coupon {
 export interface CierreCaja {
   id: number;
   fecha: string;
+  fechaIso?: string;
   usuario: string;
   montoInicial: number;
   totalVentas: number;

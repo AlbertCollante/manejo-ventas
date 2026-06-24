@@ -548,7 +548,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
     setEditingService(service);
     setEditServiceData({
       descripcion: service.descripcion || '',
-      precio: String(service.precio || ''),
+      precio: String(service.precio_de_aplicacion || ''),
       duracion: service.duracion || '',
       estado: service.estado || 'ACT'
     });
@@ -583,16 +583,19 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
     setLoading(true);
     try {
       const productIds = editServiceProducts.map(p => p.idproducto);
+      const precioDeAplicacion = Number(editServiceData.precio) || 0;
+      const productsTotal = editServiceProducts.reduce((sum, p) => sum + (p.precio || 0) * (p.cantidad || 0), 0);
+      const precioTotal = precioDeAplicacion + productsTotal;
 
       const response = await fetch(`${API_BASE}/editar-servicio/${editingService.idservicio}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           descripcion: editServiceData.descripcion,
-          precio: Number(editServiceData.precio) || 0,
+          precio: precioTotal,
           duracion: editServiceData.duracion || '',
           productos: productIds,
-          precio_de_aplicacion: Number(editServiceData.precio) || 0,
+          precio_de_aplicacion: precioDeAplicacion,
           estado: editServiceData.estado
         })
       });
@@ -982,7 +985,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                       <SelectContent>
                         {availableServices.map((service) => (
                           <SelectItem key={service.idservicio} value={service.idservicio.toString()}>
-                            {service.descripcion} - S/ {(Number(service.precio) || 0).toFixed(2)}
+                            {service.descripcion} - S/ {(Number(service.precio_de_aplicacion) || 0).toFixed(2)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1272,10 +1275,10 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                 />
               </div>
               <div>
-                <Label>Precio</Label>
+                <Label>Precio de Aplicación</Label>
                 <Input
                   type="number"
-                  placeholder="Precio del servicio"
+                  placeholder="Precio de aplicación del servicio"
                   value={editServiceData.precio}
                   onChange={(e) => setEditServiceData({ ...editServiceData, precio: e.target.value })}
                 />
