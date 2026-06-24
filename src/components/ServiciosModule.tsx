@@ -983,11 +983,13 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                         <SelectValue placeholder="Seleccionar servicio" />
                       </SelectTrigger>
                       <SelectContent>
-                        {availableServices.map((service) => (
-                          <SelectItem key={service.idservicio} value={service.idservicio.toString()}>
-                            {service.descripcion}
-                          </SelectItem>
-                        ))}
+                        {availableServices
+                          .filter((service) => service.estado === 'ACT')
+                          .map((service) => (
+                            <SelectItem key={service.idservicio} value={service.idservicio.toString()}>
+                              {service.descripcion}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
