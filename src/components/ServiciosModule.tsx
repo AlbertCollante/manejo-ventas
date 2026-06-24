@@ -985,17 +985,12 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                       <SelectContent>
                         {availableServices.map((service) => (
                           <SelectItem key={service.idservicio} value={service.idservicio.toString()}>
-                            {service.descripcion} - S/ {(Number(service.precio_de_aplicacion) || 0).toFixed(2)}
+                            {service.descripcion}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  {selectedService && (
-                    <div className="mt-2 text-sm text-muted-foreground">
-                      <p>Precio sugerido: S/ {selectedServicePrice}</p>
-                    </div>
-                  )}
                 </div>
 
                 {/* Materiales Utilizados */}
