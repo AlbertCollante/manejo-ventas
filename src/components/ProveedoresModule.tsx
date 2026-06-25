@@ -320,9 +320,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
       });
       if (!response.ok) {
         if (response.status === 404) {
-          setSelectedPedido(pedido);
-          setRecepcionStates({});
-          return;
+          throw new Error("No se encontró el endpoint de detalle del pedido.");
         }
         throw new Error(await getApiError(response));
       }
@@ -596,8 +594,12 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
 
   const handleRecepcionar = async (linea: PedidoDetalle) => {
     if (!linea.id_pedido_detalle || !selectedPedido) return;
-    const state = recepcionStates[linea.id_pedido_detalle];
-    if (!state || !state.recibido) return;
+    const state = recepcionStates[linea.id_pedido_detalle] || {
+      recibido: false,
+      cantidad_recibida: linea.cantidad_pedida,
+      cantidad_bonificada_recibida: linea.cantidad_bonificada,
+      observaciones: "",
+    };
 
     const cantidadRecibida = Number(state.cantidad_recibida);
     const cantidadBonificadaRecibida = Number(state.cantidad_bonificada_recibida);
@@ -623,6 +625,10 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     }
 
     setReceiving(linea.id_pedido_detalle);
+    setRecepcionStates((prev) => ({
+      ...prev,
+      [linea.id_pedido_detalle]: { ...state, recibido: true },
+    }));
     try {
       const response = await fetch(
         `${API_BASE}/pedidos/${selectedPedido.id_pedido}/detalle/${linea.id_pedido_detalle}/recepcionar`,
@@ -647,6 +653,52 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
       loadResumen();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error al recepcionar línea");
+    } finally {
+      setReceiving(null);
+    }
+  };
+
+  const handleRechazar = async (linea: PedidoDetalle) => {
+    if (!linea.id_pedido_detalle || !selectedPedido) return;
+    const confirmar = window.confirm(
+      `¿Está seguro de rechazar el producto "${linea.producto}"?\nSe registrará como recibido con cantidad 0.`
+    );
+    if (!confirmar) return;
+
+    setReceiving(linea.id_pedido_detalle);
+    setRecepcionStates((prev) => ({
+      ...prev,
+      [linea.id_pedido_detalle]: {
+        recibido: true,
+        cantidad_recibida: 0,
+        cantidad_bonificada_recibida: 0,
+        observaciones: "Rechazado",
+      },
+    }));
+    try {
+      const response = await fetch(
+        `${API_BASE}/pedidos/${selectedPedido.id_pedido}/detalle/${linea.id_pedido_detalle}/recepcionar`,
+        {
+          method: "PATCH",
+          headers: getHeaders(true),
+          body: JSON.stringify({
+            cantidad_recibida: 0,
+            cantidad_bonificada_recibida: 0,
+            observaciones: "Rechazado",
+          }),
+        }
+      );
+      if (!response.ok) throw new Error(await getApiError(response));
+      const data = await response.json();
+      alert(
+        data.tiene_discrepancia
+          ? "Rechazo registrado. Se detectó una discrepancia."
+          : "Rechazo registrado correctamente."
+      );
+      await fetchDetallePedido(selectedPedido);
+      loadResumen();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al rechazar línea");
     } finally {
       setReceiving(null);
     }
@@ -1016,22 +1068,24 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
               <Label className="text-xs">Hasta</Label>
               <Input type="date" value={pedidoFilterHasta} onChange={(e) => setPedidoFilterHasta(e.target.value)} />
             </div>
-            <Button
-              onClick={fetchPedidos}
-              variant="outline"
-              style={{ color: COLOR_SAGE, borderColor: COLOR_SAGE }}
-            >
-              <Search className="h-4 w-4 mr-2" />
-              Buscar
-            </Button>
-            <Button
-              onClick={limpiarFiltrosPedidos}
-              variant="ghost"
-              style={{ color: COLOR_GOLD }}
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Limpiar
-            </Button>
+            <div className="flex items-end gap-2">
+              <Button
+                onClick={fetchPedidos}
+                variant="outline"
+                style={{ color: COLOR_SAGE, borderColor: COLOR_SAGE }}
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Buscar
+              </Button>
+              <Button
+                onClick={limpiarFiltrosPedidos}
+                variant="ghost"
+                style={{ color: COLOR_GOLD }}
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Limpiar
+              </Button>
+            </div>
           </div>
 
           {loadingPedidos ? (
@@ -1040,7 +1094,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
+                  <TableHead>Pedido</TableHead>
                   <TableHead>Proveedor</TableHead>
                   <TableHead>Fecha Pedido</TableHead>
                   <TableHead>Fecha Entrega Est.</TableHead>
@@ -1059,7 +1113,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                 ) : (
                   pedidos.map((p) => (
                     <TableRow key={p.id_pedido}>
-                      <TableCell className="font-medium">#{p.id_pedido}</TableCell>
+                      <TableCell className="font-medium">{p.id_pedido}</TableCell>
                       <TableCell>{p.proveedor || getNombreProveedor(p.id_proveedor)}</TableCell>
                       <TableCell>{formatDateDisplay(p.fecha_pedido)}</TableCell>
                       <TableCell>{formatDateOnlyDisplay(p.fecha_entrega_estimada)}</TableCell>
@@ -1344,7 +1398,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                     {detalle.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={11} className="text-center text-muted-foreground">
-                          No hay líneas en este pedido.
+                          No se pudieron cargar las líneas del pedido.
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -1376,7 +1430,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                               <Input
                                 type="number"
                                 min={0}
-                                disabled={!state.recibido || entregado || receiving === id}
+                                disabled={entregado || receiving === id}
                                 value={state.cantidad_recibida}
                                 onChange={(e) => updateRecepcionField(id, "cantidad_recibida", parseInt(e.target.value) || 0)}
                                 className="w-24"
@@ -1386,7 +1440,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                               <Input
                                 type="number"
                                 min={0}
-                                disabled={!state.recibido || entregado || receiving === id}
+                                disabled={entregado || receiving === id}
                                 value={state.cantidad_bonificada_recibida}
                                 onChange={(e) => updateRecepcionField(id, "cantidad_bonificada_recibida", parseInt(e.target.value) || 0)}
                                 className="w-24"
@@ -1394,7 +1448,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                             </TableCell>
                             <TableCell>
                               <Input
-                                disabled={!state.recibido || entregado || receiving === id}
+                                disabled={entregado || receiving === id}
                                 value={state.observaciones}
                                 onChange={(e) => updateRecepcionField(id, "observaciones", e.target.value)}
                                 placeholder="Observación de recepción"
@@ -1404,14 +1458,25 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                             <TableCell>{renderEstadoLineaBadge(linea.estado, linea.tiene_discrepancia)}</TableCell>
                             <TableCell>
                               {!entregado && (
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleRecepcionar(linea)}
-                                  disabled={!state.recibido || receiving === id}
-                                  style={{ backgroundColor: COLOR_SAGE, color: "white", border: "none" }}
-                                >
-                                  {receiving === id ? "Guardando..." : "Confirmar"}
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleRecepcionar(linea)}
+                                    disabled={receiving === id}
+                                    style={{ backgroundColor: COLOR_SAGE, color: "white", border: "none" }}
+                                  >
+                                    {receiving === id ? "Guardando..." : "Confirmar"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleRechazar(linea)}
+                                    disabled={receiving === id}
+                                    style={{ color: "#DC2626", borderColor: "#DC2626" }}
+                                  >
+                                    Rechazar
+                                  </Button>
+                                </div>
                               )}
                             </TableCell>
                           </TableRow>
@@ -1471,22 +1536,24 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
               <Label className="text-xs">Hasta</Label>
               <Input type="date" value={discrepanciaFilterHasta} onChange={(e) => setDiscrepanciaFilterHasta(e.target.value)} />
             </div>
-            <Button
-              onClick={fetchDiscrepancias}
-              variant="outline"
-              style={{ color: COLOR_SAGE, borderColor: COLOR_SAGE }}
-            >
-              <Search className="h-4 w-4 mr-2" />
-              Buscar
-            </Button>
-            <Button
-              onClick={limpiarFiltrosDiscrepancias}
-              variant="ghost"
-              style={{ color: COLOR_GOLD }}
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Limpiar
-            </Button>
+            <div className="flex items-end gap-2">
+              <Button
+                onClick={fetchDiscrepancias}
+                variant="outline"
+                style={{ color: COLOR_SAGE, borderColor: COLOR_SAGE }}
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Buscar
+              </Button>
+              <Button
+                onClick={limpiarFiltrosDiscrepancias}
+                variant="ghost"
+                style={{ color: COLOR_GOLD }}
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Limpiar
+              </Button>
+            </div>
           </div>
 
           {loadingDiscrepancias ? (
@@ -1516,7 +1583,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                 ) : (
                   discrepancias.map((d, idx) => (
                     <TableRow key={idx}>
-                      <TableCell>#{d.id_pedido}</TableCell>
+                      <TableCell>{d.id_pedido}</TableCell>
                       <TableCell>{d.proveedor}</TableCell>
                       <TableCell className="font-medium">{d.producto}</TableCell>
                       <TableCell>{d.cantidad_pedida}</TableCell>
