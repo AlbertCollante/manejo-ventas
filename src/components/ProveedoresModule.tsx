@@ -18,6 +18,7 @@ import {
   ClipboardList,
   AlertOctagon,
   Clock,
+  RotateCcw,
   X
 } from "lucide-react";
 import { Badge } from "./ui/badge";
@@ -147,6 +148,12 @@ function formatDateOnlyDisplay(value: string | undefined): string {
   });
 }
 
+function getDefaultFechaEntrega(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 2);
+  return d.toISOString().split("T")[0];
+}
+
 export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
   const [view, setView] = useState<View>("proveedores");
 
@@ -198,7 +205,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
   const [nuevoPedido, setNuevoPedido] = useState({
     id_proveedor: "",
     fecha_pedido: formatDateTimeLocalInput(new Date()),
-    fecha_entrega_estimada: "",
+    fecha_entrega_estimada: getDefaultFechaEntrega(),
     observaciones: "",
   });
   const [nuevoPedidoLineas, setNuevoPedidoLineas] = useState<PedidoLineaForm[]>([
@@ -255,19 +262,24 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     }
   };
 
-  const fetchPedidos = async () => {
+  const fetchPedidosInternal = async (
+    proveedor: string,
+    estado: string,
+    desde: string,
+    hasta: string
+  ) => {
     setLoadingPedidos(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (pedidoFilterProveedor && pedidoFilterProveedor !== "all") {
-        params.append("id_proveedor", pedidoFilterProveedor);
+      if (proveedor && proveedor !== "all") {
+        params.append("id_proveedor", proveedor);
       }
-      if (pedidoFilterEstado && pedidoFilterEstado !== "all") {
-        params.append("estado_general", pedidoFilterEstado);
+      if (estado && estado !== "all") {
+        params.append("estado_general", estado);
       }
-      if (pedidoFilterDesde) params.append("desde", pedidoFilterDesde);
-      if (pedidoFilterHasta) params.append("hasta", pedidoFilterHasta);
+      if (desde) params.append("desde", desde);
+      if (hasta) params.append("hasta", hasta);
 
       const response = await fetch(`${API_BASE}/pedidos?${params.toString()}`, {
         headers: getHeaders(),
@@ -280,6 +292,23 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     } finally {
       setLoadingPedidos(false);
     }
+  };
+
+  const fetchPedidos = async () => {
+    await fetchPedidosInternal(
+      pedidoFilterProveedor,
+      pedidoFilterEstado,
+      pedidoFilterDesde,
+      pedidoFilterHasta
+    );
+  };
+
+  const limpiarFiltrosPedidos = () => {
+    setPedidoFilterProveedor("all");
+    setPedidoFilterEstado("all");
+    setPedidoFilterDesde("");
+    setPedidoFilterHasta("");
+    fetchPedidosInternal("all", "all", "", "");
   };
 
   const fetchDetallePedido = async (pedido: Pedido) => {
@@ -322,16 +351,20 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     }
   };
 
-  const fetchDiscrepancias = async () => {
+  const fetchDiscrepanciasInternal = async (
+    proveedor: string,
+    desde: string,
+    hasta: string
+  ) => {
     setLoadingDiscrepancias(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (discrepanciaFilterProveedor && discrepanciaFilterProveedor !== "all") {
-        params.append("id_proveedor", discrepanciaFilterProveedor);
+      if (proveedor && proveedor !== "all") {
+        params.append("id_proveedor", proveedor);
       }
-      if (discrepanciaFilterDesde) params.append("desde", discrepanciaFilterDesde);
-      if (discrepanciaFilterHasta) params.append("hasta", discrepanciaFilterHasta);
+      if (desde) params.append("desde", desde);
+      if (hasta) params.append("hasta", hasta);
 
       const response = await fetch(`${API_BASE}/pedidos/discrepancias?${params.toString()}`, {
         headers: getHeaders(),
@@ -344,6 +377,21 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     } finally {
       setLoadingDiscrepancias(false);
     }
+  };
+
+  const fetchDiscrepancias = async () => {
+    await fetchDiscrepanciasInternal(
+      discrepanciaFilterProveedor,
+      discrepanciaFilterDesde,
+      discrepanciaFilterHasta
+    );
+  };
+
+  const limpiarFiltrosDiscrepancias = () => {
+    setDiscrepanciaFilterProveedor("all");
+    setDiscrepanciaFilterDesde("");
+    setDiscrepanciaFilterHasta("");
+    fetchDiscrepanciasInternal("all", "", "");
   };
 
   const loadResumen = async () => {
@@ -507,7 +555,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     setNuevoPedido({
       id_proveedor: "",
       fecha_pedido: formatDateTimeLocalInput(new Date()),
-      fecha_entrega_estimada: "",
+      fecha_entrega_estimada: getDefaultFechaEntrega(),
       observaciones: "",
     });
     setNuevoPedidoLineas([
@@ -711,8 +759,8 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
         onClick={() => setView("discrepancias")}
         style={
           view === "discrepancias"
-            ? { backgroundColor: "#DC2626", color: "white", border: "none" }
-            : { color: "#DC2626", borderColor: "#DC2626" }
+            ? { backgroundColor: COLOR_GOLD, color: "white", border: "none" }
+            : { color: COLOR_GOLD, borderColor: COLOR_GOLD }
         }
       >
         <AlertOctagon className="h-4 w-4 mr-2" />
@@ -886,7 +934,11 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-2 justify-end mt-4">
-            <Button variant="outline" onClick={() => setDeletingProveedor(null)}>
+            <Button
+              variant="outline"
+              onClick={() => setDeletingProveedor(null)}
+              className="border-[#D5B888] text-[#D5B888] hover:bg-[#D5B888] hover:text-white hover:border-[#D5B888]"
+            >
               Cancelar
             </Button>
             <Button
@@ -971,6 +1023,14 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
             >
               <Search className="h-4 w-4 mr-2" />
               Buscar
+            </Button>
+            <Button
+              onClick={limpiarFiltrosPedidos}
+              variant="ghost"
+              style={{ color: COLOR_GOLD }}
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Limpiar
             </Button>
           </div>
 
@@ -1064,11 +1124,11 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
               </Select>
             </div>
             <div>
-              <Label style={{ color: COLOR_GOLD }}>Fecha y Hora de Pedido *</Label>
+              <Label style={{ color: COLOR_GOLD }}>Fecha y Hora de Pedido</Label>
               <Input
-                type="datetime-local"
-                value={nuevoPedido.fecha_pedido}
-                onChange={(e) => setNuevoPedido({ ...nuevoPedido, fecha_pedido: e.target.value })}
+                value={formatDateDisplay(nuevoPedido.fecha_pedido)}
+                readOnly
+                className="bg-[#faf9f7] cursor-default border-[#e5e1d8]"
               />
             </div>
             <div>
@@ -1077,6 +1137,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                 type="date"
                 value={nuevoPedido.fecha_entrega_estimada}
                 onChange={(e) => setNuevoPedido({ ...nuevoPedido, fecha_entrega_estimada: e.target.value })}
+                className="bg-[#faf9f7] border-[#e5e1d8]"
               />
             </div>
             <div>
@@ -1099,23 +1160,24 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Producto</TableHead>
-                  <TableHead className="w-32">Cant. Pedida</TableHead>
-                  <TableHead className="w-36">Precio Unitario</TableHead>
-                  <TableHead className="w-32">Bonif. Esperada</TableHead>
-                  <TableHead>Promoción</TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead style={{ color: COLOR_SAGE }}>Producto</TableHead>
+                  <TableHead className="w-28" style={{ color: COLOR_SAGE }}>Cant. Pedida</TableHead>
+                  <TableHead className="w-44" style={{ color: COLOR_SAGE }}>Precio Unitario</TableHead>
+                  <TableHead className="w-28" style={{ color: COLOR_SAGE }}>Bonif. Esperada</TableHead>
+                  <TableHead style={{ color: COLOR_SAGE }}>Promoción</TableHead>
                   <TableHead className="w-16"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {nuevoPedidoLineas.map((linea, idx) => (
-                  <TableRow key={idx}>
+                  <TableRow key={idx} className="hover:bg-transparent">
                     <TableCell>
                       <Input
                         value={linea.producto}
                         onChange={(e) => updateLinea(idx, "producto", e.target.value)}
                         placeholder="Paracetamol 500mg"
+                        className="bg-[#faf9f7] border-[#e5e1d8]"
                       />
                     </TableCell>
                     <TableCell>
@@ -1124,18 +1186,21 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                         min={1}
                         value={linea.cantidad_pedida}
                         onChange={(e) => updateLinea(idx, "cantidad_pedida", parseInt(e.target.value) || 0)}
+                        className="bg-[#faf9f7] border-[#e5e1d8]"
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">S/</span>
+                      <div className="flex rounded-md overflow-hidden border border-[#e5e1d8]">
+                        <div className="px-3 py-2 bg-[#f0ece3] border-r border-[#e5e1d8] text-sm text-[#7a7569] flex items-center">
+                          S/
+                        </div>
                         <Input
                           type="number"
                           step="0.01"
                           min={0}
                           value={linea.precio_unitario}
                           onChange={(e) => updateLinea(idx, "precio_unitario", parseFloat(e.target.value) || 0)}
-                          className="pl-9"
+                          className="border-0 rounded-none focus-visible:ring-0 bg-[#faf9f7]"
                         />
                       </div>
                     </TableCell>
@@ -1145,6 +1210,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                         min={0}
                         value={linea.cantidad_bonificada}
                         onChange={(e) => updateLinea(idx, "cantidad_bonificada", parseInt(e.target.value) || 0)}
+                        className="bg-[#faf9f7] border-[#e5e1d8]"
                       />
                     </TableCell>
                     <TableCell>
@@ -1152,6 +1218,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                         value={linea.descripcion_promocion}
                         onChange={(e) => updateLinea(idx, "descripcion_promocion", e.target.value)}
                         placeholder="Oferta 6x5"
+                        className="bg-[#faf9f7] border-[#e5e1d8]"
                       />
                     </TableCell>
                     <TableCell>
@@ -1165,24 +1232,16 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
             </Table>
           </div>
 
-          <Button
-            variant="outline"
-            onClick={addLinea}
-            style={{ color: COLOR_SAGE, borderColor: COLOR_SAGE }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Agregar Línea
-          </Button>
-
-          <div
-            className="p-4 rounded-lg flex justify-between items-center"
-            style={{ backgroundColor: "rgba(154, 173, 151, 0.1)", borderLeft: `4px solid ${COLOR_SAGE}` }}
-          >
-            <div>
-              <p className="text-sm text-muted-foreground">Total calculado (referencia visual)</p>
-              <p className="text-xs text-muted-foreground">El total oficial lo calcula el backend al guardar.</p>
-            </div>
-            <p className="text-2xl font-bold" style={{ color: COLOR_SAGE }}>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <Button
+              variant="outline"
+              onClick={addLinea}
+              style={{ color: COLOR_SAGE, borderColor: COLOR_SAGE }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Agregar Línea
+            </Button>
+            <p className="text-xl font-bold" style={{ color: COLOR_SAGE }}>
               S/ {totalNuevoPedido.toFixed(2)}
             </p>
           </div>
@@ -1373,7 +1432,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 style={{ color: "#DC2626" }}>Reporte de Discrepancias</h2>
+          <h2 style={{ color: COLOR_GOLD }}>Reporte de Discrepancias</h2>
           <p className="text-muted-foreground">Diferencias entre lo pedido y lo recibido</p>
         </div>
         <Button variant="outline" onClick={() => setView("pedidos")}>
@@ -1382,9 +1441,9 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
         </Button>
       </div>
 
-      <Card style={{ borderTop: "4px solid #DC2626" }}>
+      <Card style={{ borderTop: `4px solid ${COLOR_GOLD}` }}>
         <CardHeader>
-          <CardTitle style={{ color: "#DC2626" }}>Discrepancias de Recepción</CardTitle>
+          <CardTitle style={{ color: COLOR_GOLD }}>Discrepancias de Recepción</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-3 items-end">
@@ -1415,10 +1474,18 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
             <Button
               onClick={fetchDiscrepancias}
               variant="outline"
-              style={{ color: "#DC2626", borderColor: "#DC2626" }}
+              style={{ color: COLOR_SAGE, borderColor: COLOR_SAGE }}
             >
               <Search className="h-4 w-4 mr-2" />
               Buscar
+            </Button>
+            <Button
+              onClick={limpiarFiltrosDiscrepancias}
+              variant="ghost"
+              style={{ color: COLOR_GOLD }}
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Limpiar
             </Button>
           </div>
 
