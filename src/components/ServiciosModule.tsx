@@ -21,6 +21,9 @@ interface ServiciosModuleProps {
 export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
   const API_BASE = 'http://localhost:9000';
 
+  const isAdmin = currentUser.role?.toLowerCase() === 'admin' || currentUser.role?.toLowerCase() === 'administrador';
+  const isVendedor = currentUser.role?.toLowerCase() === 'vendedor';
+
   // Estados para búsqueda y carrito de productos
   const [searchProduct, setSearchProduct] = useState("");
   const [products, setProducts] = useState<any[]>([]);
@@ -762,6 +765,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
           <p className="text-muted-foreground">Registro de servicios y materiales utilizados</p>
         </div>
         <div className="flex gap-2">
+          {isAdmin && (
           <Dialog open={showAddServiceDialog} onOpenChange={setShowAddServiceDialog}>
             <DialogTrigger>
               <Button style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}>
@@ -939,6 +943,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
               </div>
             </DialogContent>
           </Dialog>
+          )}
 
           <Dialog open={showRegisterDialog} onOpenChange={handleOpenRegisterDialog}>
             <DialogTrigger>
@@ -1186,6 +1191,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                         <p className="text-lg font-bold" style={{ color: '#D5B888' }}>
                           S/ {(Number(service.precio) || 0).toFixed(2)}
                         </p>
+                        {isAdmin && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -1194,6 +1200,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1235,6 +1242,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                             <p className="text-lg font-bold" style={{ color: '#9AAD97' }}>
                               S/ {(Number(service.precio) || 0).toFixed(2)}
                             </p>
+                            {isAdmin && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -1243,6 +1251,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1256,6 +1265,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
       </Card>
 
       {/* Diálogo de Edición de Servicio */}
+      {isAdmin && (
       <Dialog open={showEditServiceDialog} onOpenChange={setShowEditServiceDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1478,6 +1488,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
           )}
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Tabla de Servicios Registrados */}
       <Card style={{ borderTop: '4px solid #D5B888' }}>

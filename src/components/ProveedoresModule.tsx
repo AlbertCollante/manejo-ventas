@@ -155,7 +155,9 @@ function getDefaultFechaEntrega(): string {
 }
 
 export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
-  const [view, setView] = useState<View>("proveedores");
+  const isAdmin = currentUser.role?.toLowerCase() === 'admin' || currentUser.role?.toLowerCase() === 'administrador';
+  const isVendedor = currentUser.role?.toLowerCase() === 'vendedor';
+  const [view, setView] = useState<View>(isVendedor ? "pedidos" : "proveedores");
 
   const getHeaders = (contentType = false): Record<string, string> => {
     const headers: Record<string, string> = {
@@ -244,6 +246,12 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
   useEffect(() => {
     if (view === "discrepancias") fetchDiscrepancias();
   }, [view]);
+
+  useEffect(() => {
+    if (isVendedor && (view === "proveedores" || view === "discrepancias")) {
+      setView("pedidos");
+    }
+  }, [isVendedor, view]);
 
   const fetchProveedores = async () => {
     setLoadingProveedores(true);
@@ -782,18 +790,20 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
 
   const renderNavigation = () => (
     <div className="flex flex-wrap items-center gap-2 mb-6">
-      <Button
-        variant={view === "proveedores" ? "default" : "outline"}
-        onClick={() => setView("proveedores")}
-        style={
-          view === "proveedores"
-            ? { backgroundColor: COLOR_GOLD, color: "white", border: "none" }
-            : { color: COLOR_GOLD, borderColor: COLOR_GOLD }
-        }
-      >
-        <Building2 className="h-4 w-4 mr-2" />
-        Proveedores
-      </Button>
+      {isAdmin && (
+        <Button
+          variant={view === "proveedores" ? "default" : "outline"}
+          onClick={() => setView("proveedores")}
+          style={
+            view === "proveedores"
+              ? { backgroundColor: COLOR_GOLD, color: "white", border: "none" }
+              : { color: COLOR_GOLD, borderColor: COLOR_GOLD }
+          }
+        >
+          <Building2 className="h-4 w-4 mr-2" />
+          Proveedores
+        </Button>
+      )}
       <Button
         variant={view === "pedidos" || view === "nuevo-pedido" || view === "detalle-pedido" ? "default" : "outline"}
         onClick={() => setView("pedidos")}
@@ -806,18 +816,20 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
         <ClipboardList className="h-4 w-4 mr-2" />
         Pedidos
       </Button>
-      <Button
-        variant={view === "discrepancias" ? "default" : "outline"}
-        onClick={() => setView("discrepancias")}
-        style={
-          view === "discrepancias"
-            ? { backgroundColor: COLOR_GOLD, color: "white", border: "none" }
-            : { color: COLOR_GOLD, borderColor: COLOR_GOLD }
-        }
-      >
-        <AlertOctagon className="h-4 w-4 mr-2" />
-        Discrepancias
-      </Button>
+      {isAdmin && (
+        <Button
+          variant={view === "discrepancias" ? "default" : "outline"}
+          onClick={() => setView("discrepancias")}
+          style={
+            view === "discrepancias"
+              ? { backgroundColor: COLOR_GOLD, color: "white", border: "none" }
+              : { color: COLOR_GOLD, borderColor: COLOR_GOLD }
+          }
+        >
+          <AlertOctagon className="h-4 w-4 mr-2" />
+          Discrepancias
+        </Button>
+      )}
     </div>
   );
 
@@ -1604,20 +1616,22 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
   );
 
   const renderResumen = () => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      <Card style={{ borderTop: `4px solid ${COLOR_GOLD}` }}>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-lg" style={{ backgroundColor: "rgba(213, 184, 136, 0.15)" }}>
-              <Building2 className="h-6 w-6" style={{ color: COLOR_GOLD }} />
+    <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-4 mb-6`}>
+      {isAdmin && (
+        <Card style={{ borderTop: `4px solid ${COLOR_GOLD}` }}>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-lg" style={{ backgroundColor: "rgba(213, 184, 136, 0.15)" }}>
+                <Building2 className="h-6 w-6" style={{ color: COLOR_GOLD }} />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Proveedores</p>
+                <p className="text-2xl font-bold" style={{ color: COLOR_GOLD }}>{resumen.proveedores}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Proveedores</p>
-              <p className="text-2xl font-bold" style={{ color: COLOR_GOLD }}>{resumen.proveedores}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <Card style={{ borderTop: `4px solid ${COLOR_SAGE}` }}>
         <CardContent className="pt-6">
@@ -1647,19 +1661,21 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
         </CardContent>
       </Card>
 
-      <Card style={{ borderTop: "4px solid #DC2626" }}>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-lg" style={{ backgroundColor: "rgba(220, 38, 38, 0.1)" }}>
-              <AlertOctagon className="h-6 w-6" style={{ color: "#DC2626" }} />
+      {isAdmin && (
+        <Card style={{ borderTop: "4px solid #DC2626" }}>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-lg" style={{ backgroundColor: "rgba(220, 38, 38, 0.1)" }}>
+                <AlertOctagon className="h-6 w-6" style={{ color: "#DC2626" }} />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Discrepancias</p>
+                <p className="text-2xl font-bold" style={{ color: "#DC2626" }}>{resumen.discrepancias}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Discrepancias</p>
-              <p className="text-2xl font-bold" style={{ color: "#DC2626" }}>{resumen.discrepancias}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 

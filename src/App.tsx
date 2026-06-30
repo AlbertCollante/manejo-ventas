@@ -48,7 +48,7 @@ export default function App() {
     { id: "inventario", label: "Inventario", icon: Package, roles: ["Administrador"] },
     { id: "contabilidad", label: "Contabilidad", icon: DollarSign, roles: ["Administrador"] },
     { id: "usuarios", label: "Usuarios", icon: Users, roles: ["Administrador"] },
-    { id: "proveedores", label: "Proveedores", icon: Building2, roles: ["Administrador"] },
+    { id: "proveedores", label: "Proveedores", icon: Building2, roles: ["Administrador", "Vendedor"] },
     { id: "apertura_caja", label: "Apertura de Caja", icon: Unlock, roles: ["Administrador", "Vendedor"] },
     { id: "cierre_caja", label: "Cierre de Caja", icon: Lock, roles: ["Administrador", "Vendedor"] },
   ];
