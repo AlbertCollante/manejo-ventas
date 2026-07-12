@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Search, Plus, ShoppingCart, Trash2, User, Download, Printer, FileText, Eye } from "lucide-react";
+import { Search, Plus, ShoppingCart, Trash2, User, Download, Printer, FileText, Eye, Ban } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Label } from "./ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -35,7 +35,7 @@ const getMayoristaPriceInfo = (product: any): { price: number; label: string } |
 const normalizeApiProduct = (product: any) => {
   const stock = Number(product.stock_actual ?? product.stock ?? 0);
   const minStock = Number(product.stock_minimo ?? product.minStock ?? 0);
-  const purchasePrice = Number(product.precio_compra ?? product.purchasePrice ?? 0);
+  const purchasePrice = Number(product.costo_compra ?? product.precio_compra ?? product.purchasePrice ?? 0);
   const priceUnit = Number(product.precio_unitario ?? product.priceUnit ?? 0);
   const priceBlister = parseOptionalPrice(product.precio_blister ?? product.priceBlister);
   const priceBoxVenta = parseOptionalPrice(product.precio_caja_venta);
@@ -60,6 +60,7 @@ const normalizeApiProduct = (product: any) => {
     shelf: product.estante ?? product.shelf ?? "",
     estado: product.estado ?? (stock <= minStock ? "Bajo stock" : "Disponible"),
     precio_caja: Number(product.precio_caja ?? priceBox),
+    costo_compra: purchasePrice,
     precio_compra: purchasePrice,
     precio_unitario: priceUnit,
     precio_blister: priceBlister,
@@ -116,6 +117,10 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
   const [hoveredMayoristaProductId, setHoveredMayoristaProductId] = useState<number | null>(null);
   const [openBoxId, setOpenBoxId] = useState<number | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [showAnnulDialog, setShowAnnulDialog] = useState(false);
+  const [saleToAnnul, setSaleToAnnul] = useState<any | null>(null);
+  const [annulReason, setAnnulReason] = useState("");
+  const [annulLoading, setAnnulLoading] = useState(false);
 
   const fetchSales = async () => {
     setLoadingSales(true);
@@ -1003,6 +1008,49 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     setShowVoucherDialog(false);
   };
 
+  const openAnnulDialog = (sale: any) => {
+    setSaleToAnnul(sale);
+    setAnnulReason("");
+    setShowAnnulDialog(true);
+  };
+
+  const handleAnnulSale = async () => {
+    if (!saleToAnnul) return;
+    if (!annulReason.trim()) {
+      alert("Por favor ingrese el motivo de anulación");
+      return;
+    }
+
+    setAnnulLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE}/anular-venta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idventa: saleToAnnul.id,
+          motivo: annulReason.trim(),
+          usuario: currentUser.name,
+        })
+      });
+
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(txt || 'Error al anular la venta');
+      }
+
+      await fetchSales();
+      setShowAnnulDialog(false);
+      setSaleToAnnul(null);
+      setAnnulReason("");
+      alert('Venta anulada correctamente');
+    } catch (error) {
+      console.error('Error anulando venta:', error);
+      alert('Error al anular la venta: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+    } finally {
+      setAnnulLoading(false);
+    }
+  };
+
   // Función para generar reporte en Excel
   const generateSalesReport = async () => {
     setReportLoading(true);
@@ -1536,15 +1584,28 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                         <TableCell>S/ {sale.total.toFixed(2)}</TableCell>
                         <TableCell>{sale.user}</TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleOpenVoucherDialog(sale)}
-                            style={{ color: '#9AAD97', borderColor: '#9AAD97' }}
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenVoucherDialog(sale)}
+                              style={{ color: '#9AAD97', borderColor: '#9AAD97' }}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              Ver
+                            </Button>
+                            {currentUser.role && currentUser.role.toLowerCase() === 'administrador' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openAnnulDialog(sale)}
+                                style={{ color: '#ef4444', borderColor: '#ef4444' }}
+                              >
+                                <Ban className="h-4 w-4 mr-1" />
+                                Anular
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ));
@@ -1824,6 +1885,63 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                 Agregar mayorista
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para anular venta */}
+      <Dialog open={showAnnulDialog} onOpenChange={setShowAnnulDialog}>
+        <DialogContent className="w-full max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#ef4444' }}>Anular Venta</DialogTitle>
+            <DialogDescription>
+              Ingrese el motivo de anulación para la venta seleccionada.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label style={{ color: '#D5B888' }}>ID Venta</Label>
+              <Input
+                value={saleToAnnul?.id || ''}
+                disabled
+                readOnly
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="annulReason" style={{ color: '#D5B888' }}>Motivo de anulación</Label>
+              <Input
+                id="annulReason"
+                value={annulReason}
+                onChange={(e) => setAnnulReason(e.target.value)}
+                placeholder="Ej: Cliente canceló la compra"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowAnnulDialog(false)}
+              disabled={annulLoading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAnnulSale}
+              disabled={annulLoading}
+              style={{ backgroundColor: '#ef4444', color: 'white', border: 'none' }}
+            >
+              {annulLoading ? (
+                <>Anulando...</>
+              ) : (
+                <>
+                  <Ban className="h-4 w-4 mr-2" />
+                  Anular Venta
+                </>
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

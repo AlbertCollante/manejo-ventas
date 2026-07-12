@@ -13,7 +13,7 @@ const API_BASE = 'http://localhost:9000';
 const normalizeApiProduct = (product: any) => {
   const stock = Number(product.stock_actual ?? product.stock ?? 0);
   const minStock = Number(product.stock_minimo ?? product.minStock ?? 0);
-  const purchasePrice = Number(product.precio_compra ?? product.purchasePrice ?? 0);
+  const purchasePrice = Number(product.costo_compra ?? product.precio_compra ?? product.purchasePrice ?? 0);
   const priceUnit = Number(product.precio_unitario ?? product.priceUnit ?? 0);
   const priceBlister = Number(product.precio_blister ?? product.priceBlister ?? 0);
   const priceBox = Number(product.precio_caja ?? product.precio_caja_venta ?? product.priceBox ?? 0);
@@ -106,6 +106,7 @@ interface Product {
   shelf: string;
   estado?: string;
   precio_caja?: number;
+  costo_compra?: number;
   precio_compra?: number;
   precio_unitario?: number;
   precio_blister?: number;
@@ -160,7 +161,7 @@ export function InventarioModule() {
     stock_minimo: 0,
     vencimiento: "",
     precio_caja: 0,
-    precio_compra: 0,
+    costo_compra: 0,
     precio_unitario: 0
   });
 
@@ -259,7 +260,7 @@ export function InventarioModule() {
       newProduct.stock_minimo === undefined ||
       !newProduct.vencimiento ||
       newProduct.precio_caja === undefined ||
-      newProduct.precio_compra === undefined ||
+      newProduct.costo_compra === undefined ||
       newProduct.precio_unitario === undefined
     ) {
       alert("Por favor complete todos los campos obligatorios");
@@ -271,7 +272,7 @@ export function InventarioModule() {
     try {
       // Calcular los campos automáticos
       const ganancia = newProduct.precio_unitario * newProduct.stock_actual;
-      const compra = newProduct.precio_compra;
+      const compra = newProduct.costo_compra;
 
       const payload = {
         marca: newProduct.marca,
@@ -282,7 +283,7 @@ export function InventarioModule() {
         stock_minimo: newProduct.stock_minimo,
         vencimiento: newProduct.vencimiento,
         precio_caja: newProduct.precio_caja,
-        precio_compra: newProduct.precio_compra,
+        costo_compra: newProduct.costo_compra,
         precio_unitario: newProduct.precio_unitario,
         ganancia,
         compra
@@ -327,7 +328,7 @@ export function InventarioModule() {
         stock_minimo: 0,
         vencimiento: "",
         precio_caja: 0,
-        precio_compra: 0,
+        costo_compra: 0,
         precio_unitario: 0
       });
 
@@ -350,7 +351,7 @@ export function InventarioModule() {
         estante: editingProduct.shelf,
         stock_actual: editingProduct.stock,
         stock_minimo: editingProduct.minStock,
-        precio_compra: editingProduct.purchasePrice,
+        costo_compra: editingProduct.purchasePrice,
         precio_unitario: editingProduct.priceUnit,
         precio_blister: editingProduct.priceBlister,
         precio_caja: editingProduct.priceBox,
@@ -577,10 +578,10 @@ export function InventarioModule() {
                         value={newProduct.stock_actual}
                         onChange={(e) => {
                           const newStock = parseInt(e.target.value) || 0;
-                          const calcPrecioCompra = newStock > 0 && newProduct.precio_caja > 0
+                          const calcCostoCompra = newStock > 0 && newProduct.precio_caja > 0
                             ? Math.round((newProduct.precio_caja / newStock) * 100) / 100
-                            : newProduct.precio_compra;
-                          setNewProduct({...newProduct, stock_actual: newStock, precio_compra: calcPrecioCompra});
+                            : newProduct.costo_compra;
+                          setNewProduct({...newProduct, stock_actual: newStock, costo_compra: calcCostoCompra});
                         }}
                       />
                     </div>
@@ -624,15 +625,15 @@ export function InventarioModule() {
                   {/* Precios */}
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <Label style={{ color: '#D5B888' }}>Precio de Compra Unitario *</Label>
+                      <Label style={{ color: '#D5B888' }}>Costo de Compra *</Label>
                       <div className="relative mt-2">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                         <Input 
                           type="number" 
                           step="0.01" 
                           placeholder="0.00" 
-                          value={newProduct.precio_compra}
-                          onChange={(e) => setNewProduct({...newProduct, precio_compra: parseFloat(e.target.value) || 0})}
+                          value={newProduct.costo_compra}
+                          onChange={(e) => setNewProduct({...newProduct, costo_compra: parseFloat(e.target.value) || 0})}
                           className="pl-10"
                         />
                       </div>
@@ -662,10 +663,10 @@ export function InventarioModule() {
                           value={newProduct.precio_caja}
                           onChange={(e) => {
                             const newPrecioCaja = parseFloat(e.target.value) || 0;
-                            const calcPrecioCompra = newPrecioCaja > 0 && newProduct.stock_actual > 0
+                            const calcCostoCompra = newPrecioCaja > 0 && newProduct.stock_actual > 0
                               ? Math.round((newPrecioCaja / newProduct.stock_actual) * 100) / 100
-                              : newProduct.precio_compra;
-                            setNewProduct({...newProduct, precio_caja: newPrecioCaja, precio_compra: calcPrecioCompra});
+                              : newProduct.costo_compra;
+                            setNewProduct({...newProduct, precio_caja: newPrecioCaja, costo_compra: calcCostoCompra});
                           }}
                           className="pl-10"
                         />
@@ -677,10 +678,10 @@ export function InventarioModule() {
                   <div className="p-3 rounded-lg" style={{ backgroundColor: 'rgba(154, 173, 151, 0.1)', borderLeft: `4px solid #9AAD97` }}>
                     <p className="text-xs text-muted-foreground mb-2">Los siguientes valores se calcularán automáticamente:</p>
                     <p className="text-sm" style={{ color: '#9AAD97', fontWeight: 'bold' }}>
-                      Ganancia: S/ {(newProduct.precio_unitario * newProduct.stock_actual - newProduct.precio_compra * newProduct.stock_actual).toFixed(2)}
+                      Ganancia: S/ {(newProduct.precio_unitario * newProduct.stock_actual - newProduct.costo_compra * newProduct.stock_actual).toFixed(2)}
                     </p>
                     <p className="text-sm" style={{ color: '#9AAD97', fontWeight: 'bold' }}>
-                      Compra Total: S/ {(newProduct.precio_compra * newProduct.stock_actual).toFixed(2)}
+                      Costo Total: S/ {(newProduct.costo_compra * newProduct.stock_actual).toFixed(2)}
                     </p>
                   </div>
                 </div>
@@ -812,7 +813,7 @@ export function InventarioModule() {
                   <th className="px-2 py-2 text-left font-medium">Stock Mínimo</th>
                   <th className="px-2 py-2 text-left font-medium">Estado</th>
                   <th className="px-2 py-2 text-left font-medium">Precio Caja</th>
-                  <th className="px-2 py-2 text-left font-medium">Precio Compra</th>
+                  <th className="px-2 py-2 text-left font-medium">Costo Compra</th>
                   <th className="px-2 py-2 text-left font-medium">Precio Unitario</th>
                   <th className="px-2 py-2 text-left font-medium">Precio Blíster</th>
                   <th className="px-2 py-2 text-left font-medium">Precio Caja Venta</th>
@@ -838,7 +839,7 @@ export function InventarioModule() {
                     <td className="px-2 py-2">{product.minStock}</td>
                     <td className="px-2 py-2">{product.estado}</td>
                     <td className="px-2 py-2" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_caja ?? product.priceBox) || 0).toFixed(2)}</td>
-                    <td className="px-2 py-2" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {((product.precio_compra ?? product.purchasePrice) || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {((product.costo_compra ?? product.precio_compra ?? product.purchasePrice) || 0).toFixed(2)}</td>
                     <td className="px-2 py-2" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_unitario ?? product.priceUnit) || 0).toFixed(2)}</td>
                     <td className="px-2 py-2" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {((product.precio_blister ?? product.priceBlister) || 0).toFixed(2)}</td>
                     <td className="px-2 py-2" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_caja_venta ?? product.priceBox) || 0).toFixed(2)}</td>
@@ -847,7 +848,7 @@ export function InventarioModule() {
                     <td className="px-2 py-2">{product.vencimiento ?? product.expiry}</td>
                     <td className="px-2 py-2">{product.ubicacion ?? product.location}</td>
                     <td className="px-2 py-2">{product.estante ?? product.shelf}</td>
-                    <td className="px-2 py-2">S/ {((product.valor_total ?? product.stock * ((product.precio_compra ?? product.purchasePrice) || 0)) || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2">S/ {((product.valor_total ?? product.stock * ((product.costo_compra ?? product.precio_compra ?? product.purchasePrice) || 0)) || 0).toFixed(2)}</td>
                     <td className="px-2 py-2">S/ {(product.ganancia ?? 0).toFixed(2)}</td>
                     <td className="px-2 py-2">S/ {((product.compra ?? product.purchasePrice) || 0).toFixed(2)}</td>
                     <td className="px-2 py-2">
@@ -932,7 +933,7 @@ export function InventarioModule() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label style={{ color: '#D5B888' }}>Precio Compra</Label>
+                  <Label style={{ color: '#D5B888' }}>Costo Compra</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                     <Input type="number" step="0.01" value={editingProduct.purchasePrice} onChange={(e) => setEditingProduct({...editingProduct, purchasePrice: parseFloat(e.target.value) || 0})} className="pl-10" />

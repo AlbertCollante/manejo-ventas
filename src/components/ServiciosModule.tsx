@@ -99,7 +99,8 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
           shelf: p.estante ?? p.shelf ?? "",
           stock: Number(p.stock_actual ?? p.stock ?? 0),
           precio_unitario: Number(p.precio_unitario ?? p.price ?? 0),
-          precio_compra: Number(p.precio_compra ?? 0),
+          costo_compra: Number(p.costo_compra ?? p.precio_compra ?? 0),
+          precio_compra: Number(p.costo_compra ?? p.precio_compra ?? 0),
         }));
         setProducts(normalized);
       }

@@ -4,7 +4,7 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { DollarSign, Lock, Send, Download, ShoppingCart, Calendar } from "lucide-react";
+import { DollarSign, Lock, Send, Download, ShoppingCart, Calendar, Ban } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
@@ -39,7 +39,10 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const [cajasSeleccionadas, setCajasSeleccionadas] = useState<number[]>([]);
   const [ventasReporte, setVentasReporte] = useState<any[]>([]);
   const [serviciosReporte, setServiciosReporte] = useState<any[]>([]);
+  const [ventasAnuladasReporte, setVentasAnuladasReporte] = useState<any[]>([]);
   const [loadingReporte, setLoadingReporte] = useState(false);
+  const [loadingVentasAnuladas, setLoadingVentasAnuladas] = useState(false);
+  const [showVentasAnuladas, setShowVentasAnuladas] = useState(false);
 
   const [ventasDelDia, setVentasDelDia] = useState<any[]>([]);
   const [serviciosDelDia, setServiciosDelDia] = useState<any[]>([]);
@@ -553,6 +556,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     setCajasSeleccionadas([]);
     setVentasReporte([]);
     setServiciosReporte([]);
+    setVentasAnuladasReporte([]);
+    setShowVentasAnuladas(false);
   };
 
   const buscarCajasReporte = () => {
@@ -641,6 +646,36 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   useEffect(() => {
     actualizarDatosReporte();
   }, [cajasSeleccionadas]);
+
+  const fetchVentasAnuladasReporte = async () => {
+    if (!reporteFechaInicio || !reporteFechaFin) {
+      alert("Por favor seleccione ambas fechas");
+      return;
+    }
+
+    setLoadingVentasAnuladas(true);
+    try {
+      const params = new URLSearchParams({
+        fechaInicio: reporteFechaInicio,
+        fechaFin: reporteFechaFin,
+      });
+      // Para administradores no se envía usuario: retorna todo el historial
+      if (!isAdmin) {
+        params.append('usuario', currentUser.name);
+      }
+
+      const resp = await fetch(`${API_BASE}/ventas-anuladas?${params.toString()}`);
+      if (!resp.ok) throw new Error('Error al obtener ventas anuladas');
+      const data = await resp.json();
+      setVentasAnuladasReporte(Array.isArray(data) ? data : []);
+      setShowVentasAnuladas(true);
+    } catch (err) {
+      console.error('Error cargando ventas anuladas:', err);
+      alert('Error al cargar las ventas anuladas');
+    } finally {
+      setLoadingVentasAnuladas(false);
+    }
+  };
 
   // Totales del reporte por fechas/cajas seleccionadas
   const totalVentasReporte = ventasReporte.reduce((sum, v) => sum + v.total, 0);
@@ -1161,6 +1196,15 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                 </Button>
                 <Button 
                   variant="outline" 
+                  onClick={fetchVentasAnuladasReporte}
+                  disabled={loadingVentasAnuladas}
+                  style={{ color: '#ef4444', borderColor: '#ef4444' }}
+                >
+                  <Ban className="h-4 w-4 mr-2" />
+                  {loadingVentasAnuladas ? 'Cargando...' : 'Ventas Anuladas'}
+                </Button>
+                <Button 
+                  variant="outline" 
                   onClick={resetearReporte}
                 >
                   Limpiar
@@ -1168,6 +1212,86 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
               </div>
             </CardContent>
           </Card>
+
+          {showVentasAnuladas && (
+            <Card style={{ borderTop: '4px solid #ef4444' }}>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle style={{ color: '#ef4444' }}>Ventas Anuladas</CardTitle>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowVentasAnuladas(false)}
+                  className="text-muted-foreground"
+                >
+                  Ocultar
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {loadingVentasAnuladas ? (
+                  <p className="text-center text-muted-foreground py-4">Cargando ventas anuladas...</p>
+                ) : ventasAnuladasReporte.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">No hay ventas anuladas en el rango seleccionado</p>
+                ) : (
+                  <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                    {ventasAnuladasReporte.map((venta, idx) => (
+                      <div key={venta.id_anulacion ?? idx} className="border rounded-lg overflow-hidden" style={{ borderColor: '#fecaca' }}>
+                        <div className="p-3 text-sm" style={{ backgroundColor: 'rgba(239, 68, 68, 0.06)' }}>
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <div className="flex flex-wrap gap-2 items-center">
+                              <span className="font-semibold" style={{ color: '#ef4444' }}>Anulación #{venta.id_anulacion ?? '-'}</span>
+                              <span className="text-muted-foreground">Venta #{venta.idventa ?? '-'}</span>
+                              <span className="px-1.5 py-0.5 rounded border text-xs" style={{ borderColor: '#9AAD97', color: '#9AAD97' }}>
+                                Caja {venta.id_apertura ?? '-'}
+                              </span>
+                            </div>
+                            <span className="font-bold" style={{ color: '#ef4444' }}>S/ {Number(venta.total_extornado ?? 0).toFixed(2)}</span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <p><span className="font-medium" style={{ color: '#9AAD97' }}>Cliente:</span> {venta.cliente ?? '-'} {venta.dni && venta.dni !== '---' ? `(DNI: ${venta.dni})` : ''}</p>
+                            <p><span className="font-medium" style={{ color: '#9AAD97' }}>Método:</span> {venta.metodo ?? '-'}</p>
+                            <p><span className="font-medium" style={{ color: '#9AAD97' }}>Fecha venta:</span> {venta.fecha_venta ? new Date(venta.fecha_venta).toLocaleString('es-PE') : '-'}</p>
+                            <p><span className="font-medium" style={{ color: '#9AAD97' }}>Fecha anulación:</span> {venta.fecha_hora ? new Date(venta.fecha_hora).toLocaleString('es-PE') : '-'}</p>
+                            <p><span className="font-medium" style={{ color: '#9AAD97' }}>Vendedor:</span> {venta.usuario_vendedor ?? '-'}</p>
+                            <p><span className="font-medium" style={{ color: '#9AAD97' }}>Anulado por:</span> {venta.usuario_anulo ?? '-'}</p>
+                          </div>
+                          <div className="mt-2 text-xs">
+                            <span className="font-medium" style={{ color: '#9AAD97' }}>Motivo:</span> {venta.motivo ?? '-'}
+                          </div>
+                        </div>
+                        <div className="p-3">
+                          <p className="text-xs font-medium mb-2" style={{ color: '#9AAD97' }}>Productos devueltos</p>
+                          {(venta.productosDevueltos || []).length === 0 ? (
+                            <p className="text-xs text-muted-foreground">Sin productos devueltos</p>
+                          ) : (
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-muted-foreground border-b" style={{ borderColor: '#f0f0f0' }}>
+                                  <th className="text-left py-1">Producto</th>
+                                  <th className="text-center py-1 w-12">Cant.</th>
+                                  <th className="text-right py-1 w-16">P.U.</th>
+                                  <th className="text-right py-1 w-16">Subtotal</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(venta.productosDevueltos || []).map((prod: any, pIdx: number) => (
+                                  <tr key={pIdx} className="border-b last:border-b-0" style={{ borderColor: '#f0f0f0' }}>
+                                    <td className="py-1 pr-1">{prod.nombre ?? '-'}</td>
+                                    <td className="py-1 text-center">{prod.cantidad ?? 0}</td>
+                                    <td className="py-1 text-right">S/ {Number(prod.precio ?? 0).toFixed(2)}</td>
+                                    <td className="py-1 text-right font-medium">S/ {Number(prod.subtotal ?? 0).toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {cajasReporte.length > 0 && (
             <Card>
