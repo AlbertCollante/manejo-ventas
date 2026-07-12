@@ -19,7 +19,8 @@ import {
   AlertOctagon,
   Clock,
   RotateCcw,
-  X
+  X,
+  DollarSign
 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import {
@@ -72,6 +73,8 @@ interface Pedido {
   total_pedido: number;
   observaciones?: string;
   estado_general: string;
+  estado_pago?: string;
+  monto_pagado?: number;
   detalle?: PedidoDetalle[];
 }
 
@@ -198,8 +201,14 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
 
   const [pedidoFilterProveedor, setPedidoFilterProveedor] = useState<string>("all");
   const [pedidoFilterEstado, setPedidoFilterEstado] = useState<string>("all");
+  const [pedidoFilterEstadoPago, setPedidoFilterEstadoPago] = useState<string>("all");
   const [pedidoFilterDesde, setPedidoFilterDesde] = useState<string>("");
   const [pedidoFilterHasta, setPedidoFilterHasta] = useState<string>("");
+
+  const [pagoDialogOpen, setPagoDialogOpen] = useState(false);
+  const [pagoPedido, setPagoPedido] = useState<Pedido | null>(null);
+  const [pagoMonto, setPagoMonto] = useState<string>("");
+  const [pagoLoading, setPagoLoading] = useState(false);
 
   const [discrepanciaFilterProveedor, setDiscrepanciaFilterProveedor] = useState<string>("all");
   const [discrepanciaFilterDesde, setDiscrepanciaFilterDesde] = useState<string>("");
@@ -210,6 +219,8 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     fecha_pedido: formatDateTimeLocalInput(new Date()),
     fecha_entrega_estimada: getDefaultFechaEntrega(),
     observaciones: "",
+    estado_pago: "PENDIENTE",
+    monto_pagado: 0,
   });
   const [nuevoPedidoLineas, setNuevoPedidoLineas] = useState<PedidoLineaForm[]>([
     {
@@ -274,6 +285,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
   const fetchPedidosInternal = async (
     proveedor: string,
     estado: string,
+    estadoPago: string,
     desde: string,
     hasta: string
   ) => {
@@ -286,6 +298,9 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
       }
       if (estado && estado !== "all") {
         params.append("estado_general", estado);
+      }
+      if (estadoPago && estadoPago !== "all") {
+        params.append("estado_pago", estadoPago);
       }
       if (desde) params.append("desde", desde);
       if (hasta) params.append("hasta", hasta);
@@ -307,6 +322,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     await fetchPedidosInternal(
       pedidoFilterProveedor,
       pedidoFilterEstado,
+      pedidoFilterEstadoPago,
       pedidoFilterDesde,
       pedidoFilterHasta
     );
@@ -315,9 +331,10 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
   const limpiarFiltrosPedidos = () => {
     setPedidoFilterProveedor("all");
     setPedidoFilterEstado("all");
+    setPedidoFilterEstadoPago("all");
     setPedidoFilterDesde("");
     setPedidoFilterHasta("");
-    fetchPedidosInternal("all", "all", "", "");
+    fetchPedidosInternal("all", "all", "all", "", "");
   };
 
   const fetchDetallePedido = async (pedido: Pedido) => {
@@ -525,7 +542,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
       return;
     }
 
-    const payload = {
+    const payload: any = {
       id_proveedor: Number(nuevoPedido.id_proveedor),
       fecha_pedido: formatDateForApi(nuevoPedido.fecha_pedido),
       fecha_entrega_estimada: nuevoPedido.fecha_entrega_estimada,
@@ -538,6 +555,10 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
         descripcion_promocion: l.descripcion_promocion || null,
       })),
     };
+    if (nuevoPedido.estado_pago && nuevoPedido.estado_pago !== "PENDIENTE") {
+      payload.estado_pago = nuevoPedido.estado_pago;
+      payload.monto_pagado = Number(nuevoPedido.monto_pagado) || 0;
+    }
 
     setSaving(true);
     try {
@@ -560,12 +581,78 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     }
   };
 
+  const handlePagarCompleto = async (pedido: Pedido) => {
+    const confirmar = window.confirm(
+      `¿Marcar como pagado el pedido #${pedido.id_pedido} por S/ ${Number(pedido.total_pedido).toFixed(2)}?`
+    );
+    if (!confirmar) return;
+    setPagoLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/pedidos/${pedido.id_pedido}`, {
+        method: "PUT",
+        headers: getHeaders(true),
+        body: JSON.stringify({
+          estado_pago: "PAGADO",
+          monto_pagado: Number(pedido.total_pedido),
+        }),
+      });
+      if (!response.ok) throw new Error(await getApiError(response));
+      alert("Pedido marcado como pagado correctamente.");
+      await fetchPedidos();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al pagar pedido");
+    } finally {
+      setPagoLoading(false);
+    }
+  };
+
+  const openPagoParcialDialog = (pedido: Pedido) => {
+    setPagoPedido(pedido);
+    setPagoMonto("");
+    setPagoDialogOpen(true);
+  };
+
+  const handlePagoParcial = async () => {
+    if (!pagoPedido) return;
+    const monto = parseFloat(pagoMonto);
+    if (!monto || monto <= 0) {
+      alert("Ingrese un monto válido mayor a 0.");
+      return;
+    }
+    const maximo = Number(pagoPedido.total_pedido) - Number(pagoPedido.monto_pagado || 0);
+    if (monto > maximo) {
+      alert(`El monto no puede superar el saldo pendiente de S/ ${maximo.toFixed(2)}.`);
+      return;
+    }
+    setPagoLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/pedidos/${pagoPedido.id_pedido}/pagar`, {
+        method: "PATCH",
+        headers: getHeaders(true),
+        body: JSON.stringify({ monto }),
+      });
+      if (!response.ok) throw new Error(await getApiError(response));
+      const data = await response.json();
+      alert(`Pago registrado correctamente. ${data.estado_pago ? `Estado: ${data.estado_pago}` : ""}`);
+      setPagoDialogOpen(false);
+      setPagoPedido(null);
+      setPagoMonto("");
+      await fetchPedidos();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al registrar pago parcial");
+    } finally {
+      setPagoLoading(false);
+    }
+  };
+
   const resetNuevoPedido = () => {
     setNuevoPedido({
       id_proveedor: "",
       fecha_pedido: formatDateTimeLocalInput(new Date()),
       fecha_entrega_estimada: getDefaultFechaEntrega(),
       observaciones: "",
+      estado_pago: "PENDIENTE",
+      monto_pagado: 0,
     });
     setNuevoPedidoLineas([
       {
@@ -825,6 +912,29 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     }
     setLineasSeleccionadas([]);
     alert(`Rechazo finalizado. Exitosos: ${exitosos}, Fallidos: ${fallidos}`);
+  };
+
+  const renderEstadoPagoBadge = (estadoPago?: string) => {
+    const upper = estadoPago?.toUpperCase() || "PENDIENTE";
+    if (upper === "PAGADO") {
+      return (
+        <Badge style={{ backgroundColor: "#DCFCE7", color: "#15803D", borderColor: "#22C55E", border: "1px solid" }}>
+          PAGADO
+        </Badge>
+      );
+    }
+    if (upper === "PARCIAL") {
+      return (
+        <Badge style={{ backgroundColor: "#FEF3C7", color: "#B45309", borderColor: "#F59E0B", border: "1px solid" }}>
+          PARCIAL
+        </Badge>
+      );
+    }
+    return (
+      <Badge style={{ backgroundColor: "#F3F4F6", color: "#6B7280", borderColor: "#D1D5DB", border: "1px solid" }}>
+        PENDIENTE
+      </Badge>
+    );
   };
 
   const renderEstadoBadge = (estado: string) => {
@@ -1164,6 +1274,20 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                 </SelectContent>
               </Select>
             </div>
+            <div className="w-full md:w-44">
+              <Label className="text-xs">Estado de Pago</Label>
+              <Select value={pedidoFilterEstadoPago} onValueChange={setPedidoFilterEstadoPago}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="PENDIENTE">PENDIENTE</SelectItem>
+                  <SelectItem value="PARCIAL">PARCIAL</SelectItem>
+                  <SelectItem value="PAGADO">PAGADO</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label className="text-xs">Desde</Label>
               <Input type="date" value={pedidoFilterDesde} onChange={(e) => setPedidoFilterDesde(e.target.value)} />
@@ -1196,7 +1320,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
             <p className="text-muted-foreground">Cargando pedidos...</p>
           ) : (
             <Table>
-              <TableHeader>
+                <TableHeader>
                 <TableRow>
                   <TableHead>Pedido</TableHead>
                   <TableHead>Proveedor</TableHead>
@@ -1204,18 +1328,23 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                   <TableHead>Fecha Entrega Est.</TableHead>
                   <TableHead>Total</TableHead>
                   <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  <TableHead>Estado Pago</TableHead>
+                  <TableHead>Monto Pagado</TableHead>
+                  <TableHead>Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pedidos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground">
                       No se encontraron pedidos.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  pedidos.map((p) => (
+                  pedidos.map((p) => {
+                    const pagado = p.estado_pago?.toUpperCase() === "PAGADO";
+                    const saldo = Number(p.total_pedido) - Number(p.monto_pagado || 0);
+                    return (
                     <TableRow key={p.id_pedido}>
                       <TableCell className="font-medium">{p.id_pedido}</TableCell>
                       <TableCell>{p.proveedor || getNombreProveedor(p.id_proveedor)}</TableCell>
@@ -1225,7 +1354,15 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                         S/ {Number(p.total_pedido).toFixed(2)}
                       </TableCell>
                       <TableCell>{renderEstadoBadge(p.estado_general)}</TableCell>
+                      <TableCell>{renderEstadoPagoBadge(p.estado_pago)}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <span className="font-medium">S/ {Number(p.monto_pagado || 0).toFixed(2)}</span>
+                          {!pagado && <span className="text-muted-foreground ml-1">/ saldo S/ {saldo.toFixed(2)}</span>}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right">
+                        <div className="flex flex-nowrap items-center justify-end gap-2">
                         <Button
                           size="sm"
                           variant="ghost"
@@ -1235,9 +1372,37 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                           <Eye className="h-4 w-4 mr-1" />
                           Ver
                         </Button>
+                        {!pagado && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handlePagarCompleto(p)}
+                              disabled={pagoLoading}
+                              title="Pagar completo"
+                              style={{ color: COLOR_SAGE, borderColor: COLOR_SAGE }}
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                              Completo
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openPagoParcialDialog(p)}
+                              disabled={pagoLoading}
+                              title="Pagar parcial"
+                              style={{ color: COLOR_GOLD, borderColor: COLOR_GOLD }}
+                            >
+                              <DollarSign className="h-4 w-4 mr-1" />
+                              Parcial
+                            </Button>
+                          </>
+                        )}
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -1306,6 +1471,41 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                 placeholder="Pedido urgente"
               />
             </div>
+            <div>
+              <Label style={{ color: COLOR_SAGE }}>Estado de Pago</Label>
+              <Select
+                value={nuevoPedido.estado_pago}
+                onValueChange={(v) => setNuevoPedido({ ...nuevoPedido, estado_pago: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccione estado de pago" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PENDIENTE">PENDIENTE</SelectItem>
+                  <SelectItem value="PARCIAL">PARCIAL</SelectItem>
+                  <SelectItem value="PAGADO">PAGADO</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {nuevoPedido.estado_pago !== "PENDIENTE" && (
+              <div>
+                <Label style={{ color: COLOR_GOLD }}>Monto Pagado</Label>
+                <div className="flex rounded-md overflow-hidden border border-[#e5e1d8]">
+                  <div className="px-3 py-2 bg-[#f0ece3] border-r border-[#e5e1d8] text-sm text-[#7a7569] flex items-center">
+                    S/
+                  </div>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={nuevoPedido.monto_pagado}
+                    onChange={(e) => setNuevoPedido({ ...nuevoPedido, monto_pagado: parseFloat(e.target.value) || 0 })}
+                    placeholder="0.00"
+                    className="border-0 rounded-none focus-visible:ring-0 bg-[#faf9f7]"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1856,6 +2056,51 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
       {view === "nuevo-pedido" && renderNuevoPedidoView()}
       {view === "detalle-pedido" && renderDetallePedidoView()}
       {view === "discrepancias" && renderDiscrepanciasView()}
+
+      <Dialog open={pagoDialogOpen} onOpenChange={setPagoDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle style={{ color: COLOR_GOLD }}>Registrar Pago Parcial</DialogTitle>
+            <DialogDescription>
+              Pedido #{pagoPedido?.id_pedido} - Total: S/ {Number(pagoPedido?.total_pedido || 0).toFixed(2)}
+              <br />
+              Pagado: S/ {Number(pagoPedido?.monto_pagado || 0).toFixed(2)} - Saldo: S/ {(Number(pagoPedido?.total_pedido || 0) - Number(pagoPedido?.monto_pagado || 0)).toFixed(2)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label style={{ color: COLOR_GOLD }}>Monto a pagar</Label>
+              <div className="flex rounded-md overflow-hidden border border-[#e5e1d8]">
+                <div className="px-3 py-2 bg-[#f0ece3] border-r border-[#e5e1d8] text-sm text-[#7a7569] flex items-center">
+                  S/
+                </div>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0.01}
+                  max={Number(pagoPedido?.total_pedido || 0) - Number(pagoPedido?.monto_pagado || 0)}
+                  value={pagoMonto}
+                  onChange={(e) => setPagoMonto(e.target.value)}
+                  placeholder="0.00"
+                  className="border-0 rounded-none focus-visible:ring-0 bg-[#faf9f7]"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setPagoDialogOpen(false)} disabled={pagoLoading}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handlePagoParcial}
+                disabled={pagoLoading}
+                style={{ backgroundColor: COLOR_GOLD, color: "white", border: "none" }}
+              >
+                {pagoLoading ? "Guardando..." : "Registrar Pago"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
