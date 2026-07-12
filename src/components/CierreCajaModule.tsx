@@ -1383,6 +1383,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                                     <tr className="text-muted-foreground">
                                       <th className="text-left py-1">Prod.</th>
                                       <th className="text-center py-1 w-10">Cant.</th>
+                                      <th className="text-right py-1 w-16">Costo</th>
                                       <th className="text-right py-1 w-16">P.U.</th>
                                       <th className="text-right py-1 w-16">Total</th>
                                     </tr>
@@ -1392,6 +1393,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                                       <tr key={idx} className="border-b last:border-b-0 border-dashed" style={{ borderColor: '#f0f0f0' }}>
                                         <td className="py-1 pr-1 truncate max-w-[120px] sm:max-w-[200px]">{item.nombre || item.name || item.producto || 'Producto'}</td>
                                         <td className="py-1 text-center">{item.cantidad || item.quantity || 1}</td>
+                                        <td className="py-1 text-right">S/ {Number(item.costo_compra ?? 0).toFixed(2)}</td>
                                         <td className="py-1 text-right">S/ {Number(item.precio_unitario || item.precio || item.price || 0).toFixed(2)}</td>
                                         <td className="py-1 text-right font-medium">S/ {(Number(item.cantidad || item.quantity || 1) * Number(item.precio_unitario || item.precio || item.price || 0)).toFixed(2)}</td>
                                       </tr>

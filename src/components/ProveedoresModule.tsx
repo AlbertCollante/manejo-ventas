@@ -180,6 +180,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
   const [loadingDiscrepancias, setLoadingDiscrepancias] = useState(false);
   const [saving, setSaving] = useState(false);
   const [receiving, setReceiving] = useState<number | null>(null);
+  const [lineasSeleccionadas, setLineasSeleccionadas] = useState<number[]>([]);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -340,15 +341,17 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
       const initialStates: Record<number, { recibido: boolean; cantidad_recibida: number; cantidad_bonificada_recibida: number; observaciones: string }> = {};
       detalle.forEach((linea) => {
         if (linea.id_pedido_detalle) {
+          const finalizado = linea.estado === "ENTREGADO" || linea.estado === "RECHAZADO";
           initialStates[linea.id_pedido_detalle] = {
-            recibido: linea.estado === "ENTREGADO",
-            cantidad_recibida: linea.cantidad_recibida ?? linea.cantidad_pedida,
-            cantidad_bonificada_recibida: linea.cantidad_bonificada_recibida ?? linea.cantidad_bonificada,
+            recibido: finalizado,
+            cantidad_recibida: linea.cantidad_recibida ?? (linea.estado === "RECHAZADO" ? 0 : linea.cantidad_pedida),
+            cantidad_bonificada_recibida: linea.cantidad_bonificada_recibida ?? (linea.estado === "RECHAZADO" ? 0 : linea.cantidad_bonificada),
             observaciones: linea.observaciones ?? "",
           };
         }
       });
       setRecepcionStates(initialStates);
+      setLineasSeleccionadas([]);
       setView("detalle-pedido");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar detalle del pedido");
@@ -600,7 +603,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     return nuevoPedidoLineas.reduce((sum, l) => sum + l.cantidad_pedida * l.precio_unitario, 0);
   }, [nuevoPedidoLineas]);
 
-  const handleRecepcionar = async (linea: PedidoDetalle) => {
+  const handleRecepcionar = async (linea: PedidoDetalle, mostrarAlerta = true) => {
     if (!linea.id_pedido_detalle || !selectedPedido) return;
     const state = recepcionStates[linea.id_pedido_detalle] || {
       recibido: false,
@@ -613,15 +616,15 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     const cantidadBonificadaRecibida = Number(state.cantidad_bonificada_recibida);
 
     if (Number.isNaN(cantidadRecibida) || cantidadRecibida < 0) {
-      alert("La cantidad recibida debe ser un número válido.");
-      return;
+      if (mostrarAlerta) alert("La cantidad recibida debe ser un número válido.");
+      throw new Error("Cantidad inválida");
     }
 
     const hayDiferencia =
       cantidadRecibida !== linea.cantidad_pedida ||
       cantidadBonificadaRecibida !== linea.cantidad_bonificada;
 
-    if (hayDiferencia) {
+    if (hayDiferencia && mostrarAlerta) {
       const confirmar = window.confirm(
         `Los valores ingresados no coinciden con lo esperado:\n` +
           `- ${linea.producto}\n` +
@@ -652,26 +655,31 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
       );
       if (!response.ok) throw new Error(await getApiError(response));
       const data = await response.json();
-      alert(
-        data.tiene_discrepancia
-          ? "Recepción guardada. Se detectó una discrepancia."
-          : "Recepción guardada correctamente."
-      );
+      if (mostrarAlerta) {
+        alert(
+          data.tiene_discrepancia
+            ? "Recepción guardada. Se detectó una discrepancia."
+            : "Recepción guardada correctamente."
+        );
+      }
       await fetchDetallePedido(selectedPedido);
       loadResumen();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error al recepcionar línea");
+      if (mostrarAlerta) alert(err instanceof Error ? err.message : "Error al recepcionar línea");
+      throw err;
     } finally {
       setReceiving(null);
     }
   };
 
-  const handleRechazar = async (linea: PedidoDetalle) => {
+  const handleRechazar = async (linea: PedidoDetalle, mostrarAlerta = true) => {
     if (!linea.id_pedido_detalle || !selectedPedido) return;
-    const confirmar = window.confirm(
-      `¿Está seguro de rechazar el producto "${linea.producto}"?\nSe registrará como recibido con cantidad 0.`
-    );
-    if (!confirmar) return;
+    if (mostrarAlerta) {
+      const confirmar = window.confirm(
+        `¿Está seguro de rechazar el producto "${linea.producto}"?\nSe registrará como recibido con cantidad 0.`
+      );
+      if (!confirmar) return;
+    }
 
     setReceiving(linea.id_pedido_detalle);
     setRecepcionStates((prev) => ({
@@ -690,6 +698,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
           method: "PATCH",
           headers: getHeaders(true),
           body: JSON.stringify({
+            estado: "RECHAZADO",
             cantidad_recibida: 0,
             cantidad_bonificada_recibida: 0,
             observaciones: "Rechazado",
@@ -698,15 +707,18 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
       );
       if (!response.ok) throw new Error(await getApiError(response));
       const data = await response.json();
-      alert(
-        data.tiene_discrepancia
-          ? "Rechazo registrado. Se detectó una discrepancia."
-          : "Rechazo registrado correctamente."
-      );
+      if (mostrarAlerta) {
+        alert(
+          data.tiene_discrepancia
+            ? "Rechazo registrado. Se detectó una discrepancia."
+            : "Rechazo registrado correctamente."
+        );
+      }
       await fetchDetallePedido(selectedPedido);
       loadResumen();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error al rechazar línea");
+      if (mostrarAlerta) alert(err instanceof Error ? err.message : "Error al rechazar línea");
+      throw err;
     } finally {
       setReceiving(null);
     }
@@ -750,6 +762,71 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
     return p?.nombre || `Proveedor #${id}`;
   };
 
+  const toggleLineaSeleccionada = (id_pedido_detalle: number) => {
+    setLineasSeleccionadas((prev) =>
+      prev.includes(id_pedido_detalle)
+        ? prev.filter((id) => id !== id_pedido_detalle)
+        : [...prev, id_pedido_detalle]
+    );
+  };
+
+  const seleccionarTodasLineas = (detalle: PedidoDetalle[]) => {
+    const pendientes = detalle
+      .filter((l) => l.id_pedido_detalle && l.estado !== "ENTREGADO" && l.estado !== "RECHAZADO")
+      .map((l) => l.id_pedido_detalle!);
+    setLineasSeleccionadas(pendientes);
+  };
+
+  const limpiarSeleccionLineas = () => {
+    setLineasSeleccionadas([]);
+  };
+
+  const confirmarLineasSeleccionadas = async () => {
+    if (!selectedPedido || lineasSeleccionadas.length === 0) return;
+    const confirmar = window.confirm(
+      `¿Confirmar ${lineasSeleccionadas.length} línea(s) seleccionada(s)?`
+    );
+    if (!confirmar) return;
+
+    let exitosos = 0;
+    let fallidos = 0;
+    for (const id of lineasSeleccionadas) {
+      const linea = selectedPedido.detalle?.find((l) => l.id_pedido_detalle === id);
+      if (!linea) continue;
+      try {
+        await handleRecepcionar(linea, false);
+        exitosos++;
+      } catch {
+        fallidos++;
+      }
+    }
+    setLineasSeleccionadas([]);
+    alert(`Confirmación finalizada. Exitosos: ${exitosos}, Fallidos: ${fallidos}`);
+  };
+
+  const rechazarLineasSeleccionadas = async () => {
+    if (!selectedPedido || lineasSeleccionadas.length === 0) return;
+    const confirmar = window.confirm(
+      `¿Rechazar ${lineasSeleccionadas.length} línea(s) seleccionada(s)?`
+    );
+    if (!confirmar) return;
+
+    let exitosos = 0;
+    let fallidos = 0;
+    for (const id of lineasSeleccionadas) {
+      const linea = selectedPedido.detalle?.find((l) => l.id_pedido_detalle === id);
+      if (!linea) continue;
+      try {
+        await handleRechazar(linea, false);
+        exitosos++;
+      } catch {
+        fallidos++;
+      }
+    }
+    setLineasSeleccionadas([]);
+    alert(`Rechazo finalizado. Exitosos: ${exitosos}, Fallidos: ${fallidos}`);
+  };
+
   const renderEstadoBadge = (estado: string) => {
     const upper = estado?.toUpperCase() || "";
     if (upper === "PENDIENTE") {
@@ -766,6 +843,13 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
         </Badge>
       );
     }
+    if (upper === "RECHAZADO") {
+      return (
+        <Badge style={{ backgroundColor: "#FEE2E2", color: "#B91C1C", borderColor: "#EF4444", border: "1px solid" }}>
+          RECHAZADO
+        </Badge>
+      );
+    }
     return <Badge variant="outline">{estado}</Badge>;
   };
 
@@ -777,6 +861,14 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
           <CheckCircle2 className="h-4 w-4" style={{ color: COLOR_SAGE }} />
           <span className="text-sm">ENTREGADO</span>
           {tieneDiscrepancia && <AlertTriangle className="h-4 w-4 text-amber-600" />}
+        </div>
+      );
+    }
+    if (upper === "RECHAZADO") {
+      return (
+        <div className="flex items-center gap-1">
+          <X className="h-4 w-4 text-red-600" />
+          <span className="text-sm text-red-600">RECHAZADO</span>
         </div>
       );
     }
@@ -1382,8 +1474,43 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle style={{ color: COLOR_SAGE }}>Líneas del Pedido</CardTitle>
+            {lineasSeleccionadas.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground mr-2">
+                  {lineasSeleccionadas.length} línea(s) seleccionada(s)
+                </span>
+                <Button
+                  size="sm"
+                  onClick={confirmarLineasSeleccionadas}
+                  disabled={receiving !== null}
+                  style={{ backgroundColor: COLOR_SAGE, color: "white", border: "none" }}
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                  Confirmar seleccionados
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={rechazarLineasSeleccionadas}
+                  disabled={receiving !== null}
+                  style={{ color: "#DC2626", borderColor: "#DC2626" }}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Rechazar seleccionados
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={limpiarSeleccionLineas}
+                  disabled={receiving !== null}
+                  className="text-muted-foreground"
+                >
+                  Limpiar
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             {loadingDetalle ? (
@@ -1393,6 +1520,19 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={
+                            detalle.length > 0 &&
+                            detalle
+                              .filter((l) => l.estado !== "ENTREGADO" && l.estado !== "RECHAZADO")
+                              .every((l) => lineasSeleccionadas.includes(l.id_pedido_detalle!))
+                          }
+                          onCheckedChange={(checked) =>
+                            checked ? seleccionarTodasLineas(detalle) : limpiarSeleccionLineas()
+                          }
+                        />
+                      </TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead>Cant. Pedida</TableHead>
                       <TableHead>Precio Unit.</TableHead>
@@ -1409,7 +1549,7 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                   <TableBody>
                     {detalle.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center text-muted-foreground">
+                        <TableCell colSpan={12} className="text-center text-muted-foreground">
                           No se pudieron cargar las líneas del pedido.
                         </TableCell>
                       </TableRow>
@@ -1417,15 +1557,22 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                       detalle.map((linea) => {
                         const id = linea.id_pedido_detalle!;
                         const state = recepcionStates[id] || {
-                          recibido: linea.estado === "ENTREGADO",
-                          cantidad_recibida: linea.cantidad_recibida ?? linea.cantidad_pedida,
-                          cantidad_bonificada_recibida: linea.cantidad_bonificada_recibida ?? linea.cantidad_bonificada,
+                          recibido: linea.estado === "ENTREGADO" || linea.estado === "RECHAZADO",
+                          cantidad_recibida: linea.cantidad_recibida ?? (linea.estado === "RECHAZADO" ? 0 : linea.cantidad_pedida),
+                          cantidad_bonificada_recibida: linea.cantidad_bonificada_recibida ?? (linea.estado === "RECHAZADO" ? 0 : linea.cantidad_bonificada),
                           observaciones: linea.observaciones ?? "",
                         };
-                        const entregado = linea.estado === "ENTREGADO";
+                        const entregado = linea.estado === "ENTREGADO" || linea.estado === "RECHAZADO";
 
                         return (
                           <TableRow key={id}>
+                            <TableCell>
+                              <Checkbox
+                                checked={lineasSeleccionadas.includes(id)}
+                                disabled={entregado || receiving === id}
+                                onCheckedChange={() => toggleLineaSeleccionada(id)}
+                              />
+                            </TableCell>
                             <TableCell className="font-medium">{linea.producto}</TableCell>
                             <TableCell>{linea.cantidad_pedida}</TableCell>
                             <TableCell>S/ {Number(linea.precio_unitario).toFixed(2)}</TableCell>
