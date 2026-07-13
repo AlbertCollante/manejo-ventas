@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -12,6 +12,7 @@ const API_BASE = 'http://localhost:9000';
 
 const normalizeApiProduct = (product: any) => {
   const stock = Number(product.stock_actual ?? product.stock ?? 0);
+  const stockInicial = Number(product.stock_inicial ?? product.stockInicial ?? stock);
   const minStock = Number(product.stock_minimo ?? product.minStock ?? 0);
   const purchasePrice = Number(product.costo_compra ?? product.precio_compra ?? product.purchasePrice ?? 0);
   const priceUnit = Number(product.precio_unitario ?? product.priceUnit ?? 0);
@@ -25,6 +26,7 @@ const normalizeApiProduct = (product: any) => {
     category: product.categoria ?? product.category ?? "",
     brand: product.marca ?? product.brand ?? "",
     stock,
+    stockInicial,
     minStock,
     purchasePrice,
     priceUnit,
@@ -43,6 +45,7 @@ const normalizeApiProduct = (product: any) => {
     precio_caja_venta: Number(product.precio_caja_venta ?? priceBox),
     unidades_blister: Number(product.unidades_blister ?? product.unitsPerBlister ?? 0),
     blisters_caja: Number(product.blisters_caja ?? product.blistersPerBox ?? 0),
+    stock_inicial: stockInicial,
     vencimiento: product.vencimiento ?? product.expiry ?? "",
     ubicacion: product.ubicacion ?? product.location ?? "",
     estante: product.estante ?? product.shelf ?? "",
@@ -57,32 +60,32 @@ const normalizeApiProduct = (product: any) => {
 const DEFAULT_PRODUCTS = [
   { 
     id: 1, code: "MED001", name: "Paracetamol 500mg", category: "Analgésicos", brand: "Farmex",
-    stock: 150, minStock: 50, purchasePrice: 1.50, priceUnit: 2.50, priceBlister: 22.50, priceBox: 200.00,
+    stock: 150, stockInicial: 150, minStock: 50, purchasePrice: 1.50, priceUnit: 2.50, priceBlister: 22.50, priceBox: 200.00,
     unitsPerBlister: 10, blistersPerBox: 10, expiry: "12/2026", location: "Estante A1", shelf: "A1"
   },
   { 
     id: 2, code: "MED002", name: "Ibuprofeno 400mg", category: "Antiinflamatorios", brand: "Bayer",
-    stock: 8, minStock: 30, purchasePrice: 2.50, priceUnit: 3.80, priceBlister: 35.00, priceBox: 320.00,
+    stock: 8, stockInicial: 8, minStock: 30, purchasePrice: 2.50, priceUnit: 3.80, priceBlister: 35.00, priceBox: 320.00,
     unitsPerBlister: 10, blistersPerBox: 10, expiry: "08/2025", location: "Estante A2", shelf: "A2"
   },
   { 
     id: 3, code: "MED003", name: "Amoxicilina 500mg", category: "Antibióticos", brand: "Labsur",
-    stock: 12, minStock: 40, purchasePrice: 10.00, priceUnit: 15.50, priceBlister: 140.00, priceBox: 1200.00,
+    stock: 12, stockInicial: 12, minStock: 40, purchasePrice: 10.00, priceUnit: 15.50, priceBlister: 140.00, priceBox: 1200.00,
     unitsPerBlister: 10, blistersPerBox: 10, expiry: "03/2026", location: "Estante B1", shelf: "B1"
   },
   { 
     id: 4, code: "MED004", name: "Loratadina 10mg", category: "Antihistamínicos", brand: "Roemmers",
-    stock: 50, minStock: 25, purchasePrice: 6.50, priceUnit: 8.90, priceBlister: 80.10, priceBox: 720.90,
+    stock: 50, stockInicial: 50, minStock: 25, purchasePrice: 6.50, priceUnit: 8.90, priceBlister: 80.10, priceBox: 720.90,
     unitsPerBlister: 10, blistersPerBox: 10, expiry: "06/2026", location: "Estante B2", shelf: "B2"
   },
   { 
     id: 5, code: "MED005", name: "Omeprazol 20mg", category: "Antiácidos", brand: "Pfizer",
-    stock: 95, minStock: 35, purchasePrice: 9.00, priceUnit: 12.00, priceBlister: 108.00, priceBox: 972.00,
+    stock: 95, stockInicial: 95, minStock: 35, purchasePrice: 9.00, priceUnit: 12.00, priceBlister: 108.00, priceBox: 972.00,
     unitsPerBlister: 10, blistersPerBox: 10, expiry: "10/2026", location: "Estante C1", shelf: "C1"
   },
   { 
     id: 6, code: "MED006", name: "Diclofenaco 50mg", category: "Antiinflamatorios", brand: "Novartis",
-    stock: 45, minStock: 20, purchasePrice: 3.00, priceUnit: 4.50, priceBlister: 40.50, priceBox: 364.50,
+    stock: 45, stockInicial: 45, minStock: 20, purchasePrice: 3.00, priceUnit: 4.50, priceBlister: 40.50, priceBox: 364.50,
     unitsPerBlister: 10, blistersPerBox: 10, expiry: "05/2026", location: "Estante C2", shelf: "C2"
   }
 ];
@@ -94,6 +97,7 @@ interface Product {
   category: string;
   brand: string;
   stock: number;
+  stockInicial: number;
   minStock: number;
   purchasePrice: number;
   priceUnit: number;
@@ -113,6 +117,7 @@ interface Product {
   precio_caja_venta?: number;
   unidades_blister?: number;
   blisters_caja?: number;
+  stock_inicial?: number;
   vencimiento?: string;
   ubicacion?: string;
   estante?: string;
@@ -131,6 +136,7 @@ const normalizeProduct = (product: any): Product => {
     category: product.category || '',
     brand: product.brand || '',
     stock: typeof product.stock === 'number' ? product.stock : 0,
+    stockInicial: typeof product.stockInicial === 'number' ? product.stockInicial : (typeof product.stock === 'number' ? product.stock : 0),
     minStock: typeof product.minStock === 'number' ? product.minStock : 0,
     purchasePrice: typeof product.purchasePrice === 'number' ? product.purchasePrice : 0,
     priceUnit: typeof product.priceUnit === 'number' ? product.priceUnit : 0,
@@ -148,7 +154,26 @@ export function InventarioModule() {
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterShelf, setFilterShelf] = useState("all");
+  const [shelfInput, setShelfInput] = useState("");
+  const [shelfDropdownOpen, setShelfDropdownOpen] = useState(false);
+  const shelfFilterRef = useRef<HTMLDivElement>(null);
   const [filterLowStock, setFilterLowStock] = useState(false);
+
+  // Sincronizar input de estante con filtro seleccionado y cerrar al hacer click fuera
+  useEffect(() => {
+    setShelfInput(filterShelf === "all" ? "" : filterShelf);
+  }, [filterShelf]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (shelfFilterRef.current && !shelfFilterRef.current.contains(event.target as Node)) {
+        setShelfDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [codeSearch, setCodeSearch] = useState("");
   
@@ -158,6 +183,7 @@ export function InventarioModule() {
     categoria: "",
     estante: "",
     stock_actual: 0,
+    stock_inicial: 0,
     stock_minimo: 0,
     vencimiento: "",
     precio_caja: 0,
@@ -220,7 +246,7 @@ export function InventarioModule() {
   }, []);
 
   const categories = ["all", "Analgésicos", "Antiinflamatorios", "Antibióticos", "Antihistamínicos", "Antiácidos", "Tópicos", "Servicios"];
-  const shelves = ["all", ...new Set(products.map(p => p.shelf || p.estante).filter(Boolean))];
+  const shelves = ["all", ...Array.from(new Set(products.map(p => p.shelf || p.estante).filter(Boolean))).sort((a, b) => a.localeCompare(b))];
   const brands = ["Farmex", "Bayer", "Labsur", "Roemmers", "Pfizer", "Novartis"];
 
   // Autocompletado por código
@@ -237,7 +263,9 @@ export function InventarioModule() {
                          (p.code || '').toLowerCase().includes(search.toLowerCase()) ||
                          (p.brand || '').toLowerCase().includes(search.toLowerCase());
     const matchesCategory = filterCategory === "all" || p.category === filterCategory;
-    const matchesShelf = filterShelf === "all" || p.shelf === filterShelf || p.estante === filterShelf;
+    const matchesShelf = filterShelf === "all" ||
+      (p.shelf || "").toLowerCase().startsWith((filterShelf || "").toLowerCase()) ||
+      (p.estante || "").toLowerCase().startsWith((filterShelf || "").toLowerCase());
     const matchesLowStock = !filterLowStock || (p.stock || 0) <= (p.minStock || 0);
     return matchesSearch && matchesCategory && matchesShelf && matchesLowStock;
   });
@@ -280,6 +308,7 @@ export function InventarioModule() {
         categoria: newProduct.categoria || null,
         estante: newProduct.estante || null,
         stock_actual: newProduct.stock_actual,
+        stock_inicial: newProduct.stock_inicial > 0 ? newProduct.stock_inicial : newProduct.stock_actual,
         stock_minimo: newProduct.stock_minimo,
         vencimiento: newProduct.vencimiento,
         precio_caja: newProduct.precio_caja,
@@ -325,6 +354,7 @@ export function InventarioModule() {
         categoria: "",
         estante: "",
         stock_actual: 0,
+        stock_inicial: 0,
         stock_minimo: 0,
         vencimiento: "",
         precio_caja: 0,
@@ -350,6 +380,7 @@ export function InventarioModule() {
         categoria: editingProduct.category,
         estante: editingProduct.shelf,
         stock_actual: editingProduct.stock,
+        stock_inicial: editingProduct.stockInicial,
         stock_minimo: editingProduct.minStock,
         costo_compra: editingProduct.purchasePrice,
         precio_unitario: editingProduct.priceUnit,
@@ -417,6 +448,7 @@ export function InventarioModule() {
       "Categoría": p.category || '',
       "Marca": p.brand || '',
       "Stock Actual": p.stock || 0,
+      "Stock Inicial": p.stockInicial || p.stock || 0,
       "Stock Mínimo": p.minStock || 0,
       "Estado": (p.stock || 0) <= (p.minStock || 0) ? "⚠️ BAJO STOCK" : "✓ OK",
       "Precio Compra": "S/ " + ((p.purchasePrice || 0).toFixed(2)),
@@ -443,10 +475,10 @@ export function InventarioModule() {
     const ws2 = XLSX.utils.json_to_sheet(productData);
     ws2["!cols"] = [
       { wch: 12 }, { wch: 25 }, { wch: 18 }, { wch: 15 },
-      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
-      { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 13 },
-      { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 10 },
-      { wch: 14 }
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
+      { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+      { wch: 13 }, { wch: 12 }, { wch: 12 }, { wch: 18 },
+      { wch: 10 }, { wch: 14 }
     ];
     XLSX.utils.book_append_sheet(wb, ws2, "Productos");
 
@@ -594,6 +626,17 @@ export function InventarioModule() {
                         onChange={(e) => setNewProduct({...newProduct, stock_minimo: parseInt(e.target.value) || 0})}
                       />
                     </div>
+                  </div>
+
+                  {/* Stock Inicial */}
+                  <div>
+                    <Label style={{ color: '#9AAD97' }}>Stock Inicial</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="100 (si se deja vacío usa el stock actual)" 
+                      value={newProduct.stock_inicial}
+                      onChange={(e) => setNewProduct({...newProduct, stock_inicial: parseInt(e.target.value) || 0})}
+                    />
                   </div>
 
                   {/* Vencimiento */}
@@ -776,17 +819,49 @@ export function InventarioModule() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={filterShelf} onValueChange={setFilterShelf}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Estante" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {shelves.slice(1).map((shelf) => (
-                  <SelectItem key={shelf} value={shelf}>{shelf}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div ref={shelfFilterRef} className="relative w-[180px]">
+              <Input
+                placeholder="Estante"
+                value={shelfInput}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setShelfInput(value);
+                  setFilterShelf(value ? value : "all");
+                  setShelfDropdownOpen(true);
+                }}
+                onFocus={() => setShelfDropdownOpen(true)}
+              />
+              {shelfDropdownOpen && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border shadow-md bg-popover text-popover-foreground max-h-60 overflow-auto p-1">
+                  <div
+                    className="relative flex w-full cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-none select-none hover:bg-accent hover:text-accent-foreground"
+                    onClick={() => {
+                      setFilterShelf("all");
+                      setShelfInput("");
+                      setShelfDropdownOpen(false);
+                    }}
+                  >
+                    Todos
+                  </div>
+                  {shelves
+                    .slice(1)
+                    .filter((shelf) => shelf.toLowerCase().startsWith(shelfInput.toLowerCase()))
+                    .map((shelf) => (
+                      <div
+                        key={shelf}
+                        className="relative flex w-full cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-none select-none hover:bg-accent hover:text-accent-foreground"
+                        onClick={() => {
+                          setFilterShelf(shelf);
+                          setShelfInput(shelf);
+                          setShelfDropdownOpen(false);
+                        }}
+                      >
+                        {shelf}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
             <Button
               onClick={() => setFilterLowStock(!filterLowStock)}
               style={{
@@ -810,17 +885,14 @@ export function InventarioModule() {
                   <th className="px-2 py-2 text-left font-medium">Categoría</th>
                   <th className="px-2 py-2 text-left font-medium">Marca</th>
                   <th className="px-2 py-2 text-left font-medium">Stock Actual</th>
+                  <th className="px-2 py-2 text-left font-medium">Stock Inicial</th>
                   <th className="px-2 py-2 text-left font-medium">Stock Mínimo</th>
                   <th className="px-2 py-2 text-left font-medium">Estado</th>
                   <th className="px-2 py-2 text-left font-medium">Precio Caja</th>
                   <th className="px-2 py-2 text-left font-medium">Costo Compra</th>
                   <th className="px-2 py-2 text-left font-medium">Precio Unitario</th>
                   <th className="px-2 py-2 text-left font-medium">Precio Blíster</th>
-                  <th className="px-2 py-2 text-left font-medium">Precio Caja Venta</th>
-                  <th className="px-2 py-2 text-left font-medium">Uds Blíster</th>
-                  <th className="px-2 py-2 text-left font-medium">Blísters Caja</th>
                   <th className="px-2 py-2 text-left font-medium">Vencimiento</th>
-                  <th className="px-2 py-2 text-left font-medium">Ubicación</th>
                   <th className="px-2 py-2 text-left font-medium">Estante</th>
                   <th className="px-2 py-2 text-left font-medium">Valor Total</th>
                   <th className="px-2 py-2 text-left font-medium">Ganancia</th>
@@ -836,17 +908,14 @@ export function InventarioModule() {
                     <td className="px-2 py-2">{product.category}</td>
                     <td className="px-2 py-2">{product.brand}</td>
                     <td className="px-2 py-2">{product.stock}</td>
+                    <td className="px-2 py-2">{product.stockInicial}</td>
                     <td className="px-2 py-2">{product.minStock}</td>
                     <td className="px-2 py-2">{product.estado}</td>
                     <td className="px-2 py-2" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_caja ?? product.priceBox) || 0).toFixed(2)}</td>
                     <td className="px-2 py-2" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {((product.costo_compra ?? product.precio_compra ?? product.purchasePrice) || 0).toFixed(2)}</td>
                     <td className="px-2 py-2" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_unitario ?? product.priceUnit) || 0).toFixed(2)}</td>
                     <td className="px-2 py-2" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {((product.precio_blister ?? product.priceBlister) || 0).toFixed(2)}</td>
-                    <td className="px-2 py-2" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_caja_venta ?? product.priceBox) || 0).toFixed(2)}</td>
-                    <td className="px-2 py-2">{product.unidades_blister ?? product.unitsPerBlister ?? 0}</td>
-                    <td className="px-2 py-2">{product.blisters_caja ?? product.blistersPerBox ?? 0}</td>
                     <td className="px-2 py-2">{product.vencimiento ?? product.expiry}</td>
-                    <td className="px-2 py-2">{product.ubicacion ?? product.location}</td>
                     <td className="px-2 py-2">{product.estante ?? product.shelf}</td>
                     <td className="px-2 py-2">S/ {((product.valor_total ?? product.stock * ((product.costo_compra ?? product.precio_compra ?? product.purchasePrice) || 0)) || 0).toFixed(2)}</td>
                     <td className="px-2 py-2">S/ {(product.ganancia ?? 0).toFixed(2)}</td>
@@ -914,22 +983,20 @@ export function InventarioModule() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label style={{ color: '#9AAD97' }}>Stock</Label>
-                  <Input type="number" value={editingProduct.stock} onChange={(e) => {
-                    const newStock = parseInt(e.target.value) || 0;
-                    const calcPurchasePrice = newStock > 0 && editingProduct.priceBox > 0
-                      ? Math.round((editingProduct.priceBox / newStock) * 100) / 100
-                      : editingProduct.purchasePrice;
-                    setEditingProduct({...editingProduct, stock: newStock, purchasePrice: calcPurchasePrice});
-                  }} />
+                  <Input type="number" value={editingProduct.stock} onChange={(e) => setEditingProduct({...editingProduct, stock: parseInt(e.target.value) || 0})} />
                 </div>
                 <div>
-                  <Label style={{ color: '#D5B888' }}>Stock Mínimo</Label>
+                  <Label style={{ color: '#D5B888' }}>Stock Inicial</Label>
+                  <Input type="number" value={editingProduct.stockInicial} onChange={(e) => setEditingProduct({...editingProduct, stockInicial: parseInt(e.target.value) || 0})} />
+                </div>
+                <div>
+                  <Label style={{ color: '#9AAD97' }}>Stock Mínimo</Label>
                   <Input type="number" value={editingProduct.minStock} onChange={(e) => setEditingProduct({...editingProduct, minStock: parseInt(e.target.value) || 0})} />
                 </div>
-                <div>
-                  <Label style={{ color: '#9AAD97' }}>Vencimiento (MM/YYYY)</Label>
-                  <Input value={editingProduct.expiry} onChange={(e) => setEditingProduct({...editingProduct, expiry: e.target.value})} placeholder="MM/YYYY" />
-                </div>
+              </div>
+              <div>
+                <Label style={{ color: '#9AAD97' }}>Vencimiento (MM/YYYY)</Label>
+                <Input value={editingProduct.expiry} onChange={(e) => setEditingProduct({...editingProduct, expiry: e.target.value})} placeholder="MM/YYYY" />
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
@@ -954,32 +1021,12 @@ export function InventarioModule() {
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label style={{ color: '#9AAD97' }}>Precio Caja Compra</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
-                    <Input type="number" step="0.01" value={editingProduct.priceBox} onChange={(e) => {
-                      const newPriceBox = parseFloat(e.target.value) || 0;
-                      const calcPurchasePrice = newPriceBox > 0 && editingProduct.stock > 0
-                        ? Math.round((newPriceBox / editingProduct.stock) * 100) / 100
-                        : editingProduct.purchasePrice;
-                      setEditingProduct({...editingProduct, priceBox: newPriceBox, purchasePrice: calcPurchasePrice});
-                    }} className="pl-10" />
-                  </div>
-                </div>
-                <div>
-                  <Label style={{ color: '#D5B888' }}>Uds/Blíster</Label>
-                  <Input type="number" value={editingProduct.unitsPerBlister} onChange={(e) => setEditingProduct({...editingProduct, unitsPerBlister: parseInt(e.target.value) || 0})} />
-                </div>
-                <div>
-                  <Label style={{ color: '#9AAD97' }}>Blísters/Caja</Label>
-                  <Input type="number" value={editingProduct.blistersPerBox} onChange={(e) => setEditingProduct({...editingProduct, blistersPerBox: parseInt(e.target.value) || 0})} />
-                </div>
-              </div>
               <div>
-                <Label style={{ color: '#9AAD97' }}>Ubicación</Label>
-                <Input value={editingProduct.location} onChange={(e) => setEditingProduct({...editingProduct, location: e.target.value})} placeholder="Ej: Estante A1, Fila 2" />
+                <Label style={{ color: '#9AAD97' }}>Precio Caja Compra</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
+                  <Input type="number" step="0.01" value={editingProduct.priceBox} onChange={(e) => setEditingProduct({...editingProduct, priceBox: parseFloat(e.target.value) || 0})} className="pl-10" />
+                </div>
               </div>
               <Button 
                 className="w-full" 

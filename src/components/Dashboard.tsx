@@ -63,8 +63,7 @@ export function Dashboard({ onNavigate, currentUser }: DashboardProps) {
     // Productos con stock bajo
     const lowStock = productos
       .filter(p => p.stock < p.minStock)
-      .sort((a, b) => a.stock - b.stock)
-      .slice(0, 5);
+      .sort((a, b) => a.stock - b.stock);
     setProductosStockBajo(lowStock);
 
     // Ventas recientes (últimas 5) con filtro por rol
@@ -153,12 +152,12 @@ export function Dashboard({ onNavigate, currentUser }: DashboardProps) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card style={{ borderTop: '4px solid #D5B888' }}>
+        <Card className="h-[420px] flex flex-col" style={{ borderTop: '4px solid #D5B888' }}>
           <CardHeader>
             <CardTitle style={{ color: '#D5B888' }}>Productos con Stock Bajo</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
+          <CardContent className="overflow-hidden" style={{ height: "420px" }}>
+            <div className="space-y-4 h-full overflow-y-auto pr-1" >
               {productosStockBajo.length > 0 ? (
                 productosStockBajo.map((product, index) => (
                   <div key={index} className="flex items-center justify-between border-b pb-3 last:border-b-0">
