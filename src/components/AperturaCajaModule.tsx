@@ -22,6 +22,8 @@ interface Apertura {
   montoInicial: string;
   observaciones: string;
   estado: string;
+  cuenta_efectivo?: number;
+  cuenta_yape?: number;
 }
 
 export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
@@ -205,6 +207,14 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
                       <p className="text-sm">
                         <span className="text-muted-foreground">Monto Inicial:</span>
                         <span className="ml-2 text-lg">S/ {parseFloat(datosApertura.montoInicial).toFixed(2)}</span>
+                      </p>
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Cuenta Efectivo:</span>
+                        <span className="ml-2 text-lg" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {Number(datosApertura.cuenta_efectivo ?? 0).toFixed(2)}</span>
+                      </p>
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Cuenta Yape:</span>
+                        <span className="ml-2 text-lg" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {Number(datosApertura.cuenta_yape ?? 0).toFixed(2)}</span>
                       </p>
                       <p className="text-sm">
                         <span className="text-muted-foreground">Fecha y Hora:</span>

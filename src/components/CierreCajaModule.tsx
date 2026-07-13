@@ -8,6 +8,7 @@ import { DollarSign, Lock, Send, Download, ShoppingCart, Calendar, Ban } from "l
 import { Textarea } from "./ui/textarea";
 import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { dataService, CierreCaja } from "../services/dataService";
 import * as XLSX from 'xlsx';
 
@@ -47,7 +48,17 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const [ventasDelDia, setVentasDelDia] = useState<any[]>([]);
   const [serviciosDelDia, setServiciosDelDia] = useState<any[]>([]);
   const [montoInicial, setMontoInicial] = useState<number>(0);
+  const [cuentaEfectivo, setCuentaEfectivo] = useState<number>(0);
+  const [cuentaYape, setCuentaYape] = useState<number>(0);
   const [aperturaDelDia, setAperturaDelDia] = useState<any>(null);
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [moveAmount, setMoveAmount] = useState("");
+  const [moveFrom, setMoveFrom] = useState<"efectivo" | "yape">("efectivo");
+  const [moveTo, setMoveTo] = useState<"efectivo" | "yape">("yape");
+  const [moveLoading, setMoveLoading] = useState(false);
+  const [showMovementsDialog, setShowMovementsDialog] = useState(false);
+  const [movementsList, setMovementsList] = useState<any[]>([]);
+  const [loadingMovements, setLoadingMovements] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,7 +94,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       fecha,
       fechaIso: !isNaN(parsedDate.getTime()) ? toLocalISODate(parsedDate) : '',
       usuario: item.usuario || '',
-      montoInicial: 0,
+      montoInicial: Number(item.monto_inicial ?? item.montoInicial ?? 0),
       totalVentas: total,
       montosContados: {
         efectivo,
@@ -316,6 +327,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
 
         setAperturaDelDia({ ...openApertura, fecha });
         setMontoInicial(Number(openApertura.montoInicial ?? 0));
+        setCuentaEfectivo(Number(openApertura.cuenta_efectivo ?? 0));
+        setCuentaYape(Number(openApertura.cuenta_yape ?? 0));
 
         // Cargar ventas desde la API de esta caja
         await fetchVentasDelDia(openApertura.id);
@@ -324,6 +337,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       } else {
         setAperturaDelDia(null);
         setMontoInicial(0);
+        setCuentaEfectivo(0);
+        setCuentaYape(0);
         setVentasDelDia([]);
         setServiciosDelDia([]);
       }
@@ -331,6 +346,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
       setAperturaDelDia(null);
       setMontoInicial(0);
+      setCuentaEfectivo(0);
+      setCuentaYape(0);
       setVentasDelDia([]);
       setServiciosDelDia([]);
     }
@@ -367,12 +384,105 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     ),
   };
 
-  const totalEsperado = montoInicial + totalIngresos;
+  const totalEsperado = cuentaEfectivo + cuentaYape;
   const totalContado = parseFloat(montoEfectivo || "0") + 
                        parseFloat(montoYape || "0") + 
                        parseFloat(montoTarjeta || "0") + 
                        parseFloat(montoTransferencia || "0");
   const diferencia = totalContado - totalEsperado;
+
+  const fetchMovements = async () => {
+    if (!aperturaDelDia) return;
+    setLoadingMovements(true);
+    try {
+      const resp = await fetch(`${API_BASE}/movimientos-cuenta?id_apertura=${aperturaDelDia.id}`);
+      if (!resp.ok) throw new Error('Error al obtener movimientos');
+      const data = await resp.json();
+      setMovementsList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error cargando movimientos:', err);
+      setMovementsList([]);
+    } finally {
+      setLoadingMovements(false);
+    }
+  };
+
+  const handleMoveBetweenAccounts = async () => {
+    if (!aperturaDelDia) {
+      alert('No hay caja abierta');
+      return;
+    }
+    const amount = parseFloat(moveAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('Ingrese un monto válido mayor a 0');
+      return;
+    }
+    if (moveFrom === moveTo) {
+      alert('La cuenta de origen y destino deben ser diferentes');
+      return;
+    }
+
+    const sourceBalance = moveFrom === 'efectivo' ? cuentaEfectivo : cuentaYape;
+    if (amount > sourceBalance) {
+      alert(`Saldo insuficiente en cuenta ${moveFrom}. Disponible: S/ ${sourceBalance.toFixed(2)}`);
+      return;
+    }
+
+    setMoveLoading(true);
+    try {
+      const [subtractResp, addResp] = await Promise.all([
+        fetch(`${API_BASE}/actualizar-cuenta-${moveFrom}/${aperturaDelDia.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ monto: -amount })
+        }),
+        fetch(`${API_BASE}/actualizar-cuenta-${moveTo}/${aperturaDelDia.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ monto: amount })
+        })
+      ]);
+
+      if (!subtractResp.ok) {
+        const txt = await subtractResp.text();
+        throw new Error(`Error restando de cuenta origen: ${txt}`);
+      }
+      if (!addResp.ok) {
+        const txt = await addResp.text();
+        throw new Error(`Error sumando a cuenta destino: ${txt}`);
+      }
+
+      // Registrar el movimiento en el historial
+      const movimientoResp = await fetch(`${API_BASE}/movimientos-cuenta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id_apertura: aperturaDelDia.id,
+          cuenta_origen: moveFrom === 'efectivo' ? 'EFECTIVO' : 'YAPE',
+          cuenta_destino: moveTo === 'efectivo' ? 'EFECTIVO' : 'YAPE',
+          monto: amount,
+          usuario: currentUser.name,
+          observaciones: `Movimiento de ${moveFrom} a ${moveTo}`
+        })
+      });
+
+      if (!movimientoResp.ok) {
+        const txt = await movimientoResp.text();
+        console.error('Error registrando movimiento:', txt);
+      }
+
+      // Recargar apertura para actualizar saldos
+      await fetchOpenApertura();
+      setMoveAmount("");
+      setShowMoveDialog(false);
+      alert(`Movimiento realizado: S/ ${amount.toFixed(2)} de ${moveFrom} a ${moveTo}`);
+    } catch (error) {
+      console.error('Error movimiento entre cuentas:', error);
+      alert('Error al realizar el movimiento: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+    } finally {
+      setMoveLoading(false);
+    }
+  };
 
   const handleCerrarCaja = async () => {
     if (!aperturaDelDia) {
@@ -800,25 +910,45 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>Ventas por Método de Pago</CardTitle>
+                <CardTitle>Cuentas Contables</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between p-3 border-l-4 border-green-500 bg-green-50 rounded-lg">
-                    <span>Efectivo</span>
-                    <span>S/ {ingresosPorMetodo.efectivo.toFixed(2)}</span>
+                    <span>Cuenta Efectivo</span>
+                    <span style={{ fontWeight: 'bold' }}>S/ {cuentaEfectivo.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-l-4 border-purple-500 bg-purple-50 rounded-lg">
-                    <span>Yape</span>
-                    <span>S/ {ingresosPorMetodo.yape.toFixed(2)}</span>
+                    <span>Cuenta Yape</span>
+                    <span style={{ fontWeight: 'bold' }}>S/ {cuentaYape.toFixed(2)}</span>
                   </div>
-                  <div className="flex items-center justify-between p-3 border-l-4 border-cyan-500 bg-cyan-50 rounded-lg">
-                    <span>Tarjeta</span>
-                    <span>S/ {ingresosPorMetodo.tarjeta.toFixed(2)}</span>
+                  <div className="pt-2 border-t">
+                    <p className="text-xs text-muted-foreground mb-2">Ventas por método de pago (solo referencia)</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="flex justify-between"><span>Efectivo</span><span>S/ {ingresosPorMetodo.efectivo.toFixed(2)}</span></div>
+                      <div className="flex justify-between"><span>Yape</span><span>S/ {ingresosPorMetodo.yape.toFixed(2)}</span></div>
+                      <div className="flex justify-between"><span>Tarjeta</span><span>S/ {ingresosPorMetodo.tarjeta.toFixed(2)}</span></div>
+                      <div className="flex justify-between"><span>Transferencia</span><span>S/ {ingresosPorMetodo.transferencia.toFixed(2)}</span></div>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between p-3 border-l-4 border-blue-500 bg-blue-50 rounded-lg">
-                    <span>Transferencia</span>
-                    <span>S/ {ingresosPorMetodo.transferencia.toFixed(2)}</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowMoveDialog(true)}
+                      disabled={!aperturaDelDia}
+                    >
+                      Movimientos de cuentas
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        fetchMovements();
+                        setShowMovementsDialog(true);
+                      }}
+                      disabled={!aperturaDelDia}
+                    >
+                      Ver movimientos
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -851,12 +981,12 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                           />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Esperado: S/ {(montoInicial + ingresosPorMetodo.efectivo).toFixed(2)}
+                          Esperado en cuenta: S/ {cuentaEfectivo.toFixed(2)}
                         </p>
                       </div>
 
                       <div>
-                        <Label>Yape / Plin Contado</Label>
+                        <Label>Yape / Plin / Tarjeta / Transferencia Contado</Label>
                         <div className="relative mt-2">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                             S/
@@ -871,47 +1001,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                           />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Esperado: S/ {ingresosPorMetodo.yape.toFixed(2)}
-                        </p>
-                      </div>
-
-                      <div>
-                        <Label>Tarjeta Contado</Label>
-                        <div className="relative mt-2">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                            S/
-                          </span>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={montoTarjeta}
-                            onChange={(e) => setMontoTarjeta(e.target.value)}
-                            className="pl-10"
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Esperado: S/ {ingresosPorMetodo.tarjeta.toFixed(2)}
-                        </p>
-                      </div>
-
-                      <div>
-                        <Label>Transferencia Contado</Label>
-                        <div className="relative mt-2">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                            S/
-                          </span>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={montoTransferencia}
-                            onChange={(e) => setMontoTransferencia(e.target.value)}
-                            className="pl-10"
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Esperado: S/ {ingresosPorMetodo.transferencia.toFixed(2)}
+                          Esperado en cuenta: S/ {cuentaYape.toFixed(2)}
                         </p>
                       </div>
 
@@ -1111,6 +1201,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nro Caja</TableHead>
+                      <TableHead>Monto Inicial</TableHead>
                       <TableHead>Fecha y Hora</TableHead>
                       <TableHead>Usuario</TableHead>
                       <TableHead>Efectivo</TableHead>
@@ -1127,6 +1218,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                       allCierres.map((cierre) => (
                         <TableRow key={cierre.id}>
                           <TableCell className="font-bold" style={{ color: '#9AAD97' }}>{cierre.aperturaId}</TableCell>
+                          <TableCell className="text-sm">S/ {cierre.montoInicial.toFixed(2)}</TableCell>
                           <TableCell className="text-sm">{cierre.fecha}</TableCell>
                           <TableCell>{cierre.usuario}</TableCell>
                           <TableCell>S/ {cierre.montosContados.efectivo.toFixed(2)}</TableCell>
@@ -1144,7 +1236,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center py-4 text-muted-foreground">
+                        <TableCell colSpan={11} className="text-center py-4 text-muted-foreground">
                           No hay cierres registrados
                         </TableCell>
                       </TableRow>
@@ -1449,6 +1541,132 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
           )}
         </>
       )}
+
+      {/* Diálogo de movimientos entre cuentas */}
+      <Dialog open={showMoveDialog} onOpenChange={setShowMoveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Movimientos de Cuentas</DialogTitle>
+            <DialogDescription>
+              Transfiere dinero entre la cuenta efectivo y la cuenta yape. El monto se restará de la cuenta origen y sumará a la cuenta destino.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Cuenta Origen</Label>
+                <Select value={moveFrom} onValueChange={(value: "efectivo" | "yape") => {
+                  setMoveFrom(value);
+                  if (moveTo === value) {
+                    setMoveTo(value === 'efectivo' ? 'yape' : 'efectivo');
+                  }
+                }}>
+                  <SelectTrigger className="w-full mt-2">
+                    <SelectValue placeholder="Origen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="efectivo">Efectivo</SelectItem>
+                    <SelectItem value="yape">Yape</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Cuenta Destino</Label>
+                <Select value={moveTo} onValueChange={(value: "efectivo" | "yape") => {
+                  setMoveTo(value);
+                  if (moveFrom === value) {
+                    setMoveFrom(value === 'efectivo' ? 'yape' : 'efectivo');
+                  }
+                }}>
+                  <SelectTrigger className="w-full mt-2">
+                    <SelectValue placeholder="Destino" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="efectivo">Efectivo</SelectItem>
+                    <SelectItem value="yape">Yape</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Monto a transferir</Label>
+              <div className="relative mt-2">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={moveAmount}
+                  onChange={(e) => setMoveAmount(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Saldo disponible: S/ {moveFrom === 'efectivo' ? cuentaEfectivo.toFixed(2) : cuentaYape.toFixed(2)}
+              </p>
+            </div>
+            <Button
+              className="w-full"
+              style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
+              onClick={handleMoveBetweenAccounts}
+              disabled={moveLoading}
+            >
+              {moveLoading ? 'Procesando...' : 'Realizar Movimiento'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo para ver movimientos anteriores */}
+      <Dialog open={showMovementsDialog} onOpenChange={setShowMovementsDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Historial de Movimientos entre Cuentas</DialogTitle>
+            <DialogDescription>
+              Movimientos registrados para la caja actual.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-2">
+            {loadingMovements ? (
+              <p className="text-center text-muted-foreground py-4">Cargando movimientos...</p>
+            ) : movementsList.length === 0 ? (
+              <p className="text-center text-muted-foreground py-4">No hay movimientos registrados</p>
+            ) : (
+              <div className="overflow-auto max-h-[400px]">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="border-b">
+                      <th className="text-left py-2 px-2">Fecha</th>
+                      <th className="text-left py-2 px-2">Origen</th>
+                      <th className="text-left py-2 px-2">Destino</th>
+                      <th className="text-right py-2 px-2">Monto</th>
+                      <th className="text-left py-2 px-2">Usuario</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movementsList.map((mov) => {
+                      const rawFecha = mov.fecha_hora || mov.fecha || new Date().toISOString();
+                      const parsedDate = new Date(rawFecha);
+                      const fecha = !isNaN(parsedDate.getTime())
+                        ? `${parsedDate.toLocaleDateString('es-PE')} ${parsedDate.toLocaleTimeString('es-PE')}`
+                        : String(rawFecha);
+                      return (
+                        <tr key={mov.id_movimiento ?? mov.id} className="border-b last:border-b-0">
+                          <td className="py-2 px-2 whitespace-nowrap">{fecha}</td>
+                          <td className="py-2 px-2">{mov.cuenta_origen}</td>
+                          <td className="py-2 px-2">{mov.cuenta_destino}</td>
+                          <td className="py-2 px-2 text-right font-semibold">S/ {Number(mov.monto ?? 0).toFixed(2)}</td>
+                          <td className="py-2 px-2">{mov.usuario}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

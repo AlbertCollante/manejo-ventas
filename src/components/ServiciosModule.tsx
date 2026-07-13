@@ -21,6 +21,31 @@ interface ServiciosModuleProps {
 export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
   const API_BASE = 'http://localhost:9000';
 
+  const updateCashAccount = async (idApertura: number, paymentMethod: string, amount: number) => {
+    const metodo = String(paymentMethod).toLowerCase();
+    const esEfectivo = metodo === 'efectivo';
+    const esYapeCuenta = ['yape', 'tarjeta', 'transferencia'].includes(metodo);
+    if (!esEfectivo && !esYapeCuenta) return;
+
+    const url = esEfectivo
+      ? `${API_BASE}/actualizar-cuenta-efectivo/${idApertura}`
+      : `${API_BASE}/actualizar-cuenta-yape/${idApertura}`;
+
+    try {
+      const resp = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monto: amount })
+      });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        console.error('Error actualizando cuenta:', txt);
+      }
+    } catch (e) {
+      console.error('Error actualizando cuenta:', e);
+    }
+  };
+
   const isAdmin = currentUser.role?.toLowerCase() === 'admin' || currentUser.role?.toLowerCase() === 'administrador';
   const isVendedor = currentUser.role?.toLowerCase() === 'vendedor';
 
@@ -499,6 +524,9 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
       
       // Recargar servicios registrados
       await loadRegisteredServices();
+
+      // Actualizar cuenta de apertura según método de pago
+      await updateCashAccount(activeBoxId, metodo, cost);
     } catch (err) {
       console.error('Error registrando servicio:', err);
       alert('Error al registrar el servicio');

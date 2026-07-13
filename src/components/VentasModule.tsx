@@ -14,6 +14,31 @@ import { dataService } from "../services/dataService";
 
 const API_BASE = 'http://localhost:9000';
 
+const updateCashAccount = async (idApertura: number, paymentMethod: string, amount: number) => {
+  const metodo = String(paymentMethod).toLowerCase();
+  const esEfectivo = metodo === 'efectivo';
+  const esYapeCuenta = ['yape', 'tarjeta', 'transferencia'].includes(metodo);
+  if (!esEfectivo && !esYapeCuenta) return;
+
+  const url = esEfectivo
+    ? `${API_BASE}/actualizar-cuenta-efectivo/${idApertura}`
+    : `${API_BASE}/actualizar-cuenta-yape/${idApertura}`;
+
+  try {
+    const resp = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ monto: amount })
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.error('Error actualizando cuenta:', txt);
+    }
+  } catch (e) {
+    console.error('Error actualizando cuenta:', e);
+  }
+};
+
 const parseOptionalPrice = (value: unknown): number | null => {
   if (value == null || value === '') return null;
   const n = Number(value);
@@ -971,6 +996,11 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       // Refrescar ventas desde API
       await fetchSales();
 
+      // Actualizar cuenta de apertura según método de pago
+      if (idApertura) {
+        await updateCashAccount(idApertura, saleInfo.metodo, total);
+      }
+
       // Buscar la venta creada en la lista para mostrar
       const ventasList = await (await fetch(`${API_BASE}/ventas`)).json();
       const created = ventasList.find((v: any) => v.id === idventa || v.idventa === idventa) || null;
@@ -1039,6 +1069,12 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       }
 
       await fetchSales();
+
+      // Restar monto de la cuenta correspondiente
+      if (saleToAnnul.id_apertura && saleToAnnul.total) {
+        await updateCashAccount(saleToAnnul.id_apertura, saleToAnnul.paymentMethod, -Number(saleToAnnul.total));
+      }
+
       setShowAnnulDialog(false);
       setSaleToAnnul(null);
       setAnnulReason("");
