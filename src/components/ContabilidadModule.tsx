@@ -1,339 +1,202 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { TrendingUp, TrendingDown, DollarSign, Receipt, Plus, Calendar, FileText, Download } from "lucide-react";
-import { Badge } from "./ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { TrendingUp, TrendingDown, DollarSign, Plus, RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
-import * as XLSX from "xlsx";
-import contabilidadData from "../data/contabilidad.json";
 
 const API_BASE = 'http://localhost:9000';
 
-export function ContabilidadModule() {
-  const [egresos, setEgresos] = useState(contabilidadData.egresos);
-  const [ingresos, setIngresos] = useState<any[]>([]);
-  const [productos, setProductos] = useState<any[]>([]);
-  
-  const [newExpense, setNewExpense] = useState({
-    concept: "",
-    amount: "",
-    type: "",
-    description: "",
-    date: new Date().toISOString().split('T')[0]
+interface CuentaContable {
+  id_cuenta: number;
+  codigo: string;
+  nombre: string;
+  tipo: 'INGRESO' | 'EGRESO';
+  saldo: number;
+  es_totalizadora: number;
+  cuenta_padre_id: number | null;
+  cuenta_padre: string | null;
+}
+
+interface MovimientoContable {
+  id_movimiento?: number;
+  id_cuenta: number;
+  cuenta?: string;
+  monto: number;
+  tipo: 'INGRESO' | 'EGRESO';
+  concepto: string;
+  usuario: string;
+  fecha_hora?: string;
+  origen?: string;
+}
+
+interface ContabilidadModuleProps {
+  currentUser: {
+    username: string;
+    role: string;
+    name: string;
+  };
+}
+
+export function ContabilidadModule({ currentUser }: ContabilidadModuleProps) {
+  const [cuentas, setCuentas] = useState<CuentaContable[]>([]);
+  const [movimientos, setMovimientos] = useState<MovimientoContable[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showRegisterDialog, setShowRegisterDialog] = useState(false);
+  const [registerLoading, setRegisterLoading] = useState(false);
+
+  const [newMovement, setNewMovement] = useState({
+    id_cuenta: '',
+    tipo: '',
+    monto: '',
+    concepto: ''
   });
-  
-  const [filterStartDate, setFilterStartDate] = useState("");
-  const [filterEndDate, setFilterEndDate] = useState("");
-  const [selectedDate, setSelectedDate] = useState("");
-  const [montoRemesado, setMontoRemesado] = useState("");
-  const [montoDejado, setMontoDejado] = useState("");
 
-  // Cargar datos de la API
+  const fetchCuentas = async (): Promise<string | null> => {
+    try {
+      const resp = await fetch(`${API_BASE}/cuentas-contables`);
+      if (!resp.ok) throw new Error(`Error ${resp.status}: ${await resp.text()}`);
+      const data = await resp.json();
+      const normalized = Array.isArray(data)
+        ? data.map((c: any) => ({ ...c, saldo: Number(c.saldo ?? 0) }))
+        : [];
+      setCuentas(normalized);
+      return null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error cargando cuentas';
+      console.error('Error cargando cuentas:', err);
+      setCuentas([]);
+      return msg;
+    }
+  };
+
+  const fetchMovimientos = async (): Promise<string | null> => {
+    try {
+      const resp = await fetch(`${API_BASE}/movimientos-contables`);
+      if (!resp.ok) throw new Error(`Error ${resp.status}: ${await resp.text()}`);
+      const data = await resp.json();
+      const normalized = Array.isArray(data)
+        ? data.map((m: any) => ({ ...m, monto: Number(m.monto ?? 0) }))
+        : [];
+      setMovimientos(normalized);
+      return null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error cargando movimientos';
+      console.error('Error cargando movimientos:', err);
+      setMovimientos([]);
+      return msg;
+    }
+  };
+
+  const loadAll = async () => {
+    setLoading(true);
+    setError(null);
+    const [errCuentas, errMovimientos] = await Promise.all([fetchCuentas(), fetchMovimientos()]);
+    if (errCuentas || errMovimientos) {
+      setError([errCuentas, errMovimientos].filter(Boolean).join(' | '));
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Cargar ventas desde API
-        const ventasRes = await fetch(`${API_BASE}/ventas`);
-        if (ventasRes.ok) {
-          const ventasData = await ventasRes.json();
-          if (Array.isArray(ventasData)) {
-            const normalized = ventasData.map((v: any) => ({
-              id: v.id ?? v.idventa ?? null,
-              date: v.fecha ?? v.date ?? new Date().toISOString(),
-              concept: v.cliente || v.customer || 'Cliente General',
-              total: Number(v.total ?? 0),
-              type: 'Venta'
-            }));
-            setIngresos(normalized);
-          }
-        }
-      } catch (error) {
-        console.error('Error cargando ventas:', error);
-      }
-
-      try {
-        // Cargar productos desde API
-        const productosRes = await fetch(`${API_BASE}/inventario-productos`);
-        if (productosRes.ok) {
-          const productosData = await productosRes.json();
-          if (Array.isArray(productosData)) {
-            const normalized = productosData.map((p: any) => ({
-              id: p.id ?? p.idproducto ?? null,
-              name: p.nombre ?? p.name ?? '',
-              purchasePrice: Number(p.compra ?? p.purchasePrice ?? 0),
-              date: p.id ?? p.idproducto ?? ''
-            }));
-            setProductos(normalized);
-          }
-        }
-      } catch (error) {
-        console.error('Error cargando productos:', error);
-      }
-    };
-
-    loadData();
+    loadAll();
   }, []);
-  
-  const filterByDate = (items: any[]) => {
-    if (!filterStartDate && !filterEndDate) return items;
-    
-    return items.filter(item => {
-      const rawDate = item.date || item.fecha || new Date().toISOString();
-      const dateStr = typeof rawDate === 'string' ? rawDate : new Date(rawDate).toISOString();
-      const itemDate = dateStr.includes('/') 
-        ? new Date(dateStr.split('/').reverse().join('-'))
-        : new Date(dateStr);
-      const start = filterStartDate ? new Date(filterStartDate) : null;
-      const end = filterEndDate ? new Date(filterEndDate) : null;
-      
-      if (start && end) {
-        return itemDate >= start && itemDate <= end;
-      } else if (start) {
-        return itemDate >= start;
-      } else if (end) {
-        return itemDate <= end;
+
+  const cuentaIngresos = cuentas.find(c => c.codigo === '10');
+  const cuentaEgresos = cuentas.find(c => c.codigo === '50');
+  const saldoIngresos = cuentaIngresos?.saldo ?? 0;
+  const saldoEgresos = Math.abs(cuentaEgresos?.saldo ?? 0);
+  const balance = saldoIngresos - saldoEgresos;
+
+  const handleRegisterMovement = async () => {
+    if (!newMovement.id_cuenta || !newMovement.tipo || !newMovement.monto || !newMovement.concepto) {
+      alert('Por favor complete todos los campos obligatorios');
+      return;
+    }
+
+    const monto = parseFloat(newMovement.monto);
+    if (isNaN(monto) || monto <= 0) {
+      alert('Ingrese un monto válido mayor a 0');
+      return;
+    }
+
+    setRegisterLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE}/movimientos-contables`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id_cuenta: Number(newMovement.id_cuenta),
+          monto,
+          tipo: newMovement.tipo,
+          concepto: newMovement.concepto,
+          usuario: currentUser.name
+        })
+      });
+
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(txt || 'Error al registrar movimiento');
       }
-      return true;
-    });
-  };
 
-  const filteredIngresos = filterByDate(ingresos);
-  const filteredEgresos = filterByDate(productos.map(p => ({
-    ...p,
-    amount: p.purchasePrice,
-    concept: p.name,
-    type: 'Compra'
-  })));
-  
-  // Sumatoria de ingresos (total de ventas)
-  const totalIngresos = filteredIngresos.reduce((sum, item) => sum + (item.total || 0), 0);
-  
-  // Sumatoria de egresos (suma de precios de compra de productos)
-  const totalEgresos = filteredEgresos.reduce((sum, item) => sum + (item.amount || 0), 0);
-  
-  const balance = totalIngresos - totalEgresos;
-
-  /*
-  const estadoResultados = {
-    ventasBrutas: ingresos.reduce((sum, item) => sum + item.amount, 0),
-    costoVentas: egresos.filter(e => e.type === "Compra").reduce((sum, item) => sum + item.amount, 0),
-    gastoOperativos: egresos.filter(e => e.type === "Servicios").reduce((sum, item) => sum + item.amount, 0),
-    gastosAdmin: egresos.filter(e => e.type === "Nómina").reduce((sum, item) => sum + item.amount, 0),
-    otrosGastos: egresos.filter(e => e.type === "Mantenimiento").reduce((sum, item) => sum + item.amount, 0),
-  };
-
-  const utilidadBruta = estadoResultados.ventasBrutas - estadoResultados.costoVentas;
-  const utilidadOperativa = utilidadBruta - estadoResultados.gastoOperativos;
-  const utilidadNeta = utilidadOperativa - estadoResultados.gastosAdmin - estadoResultados.otrosGastos;
-  */
-
-  const handleAddExpense = () => {
-    if (!newExpense.concept || !newExpense.amount || !newExpense.type) {
-      alert("Por favor complete todos los campos obligatorios");
-      return;
+      await loadAll();
+      setNewMovement({ id_cuenta: '', tipo: '', monto: '', concepto: '' });
+      setShowRegisterDialog(false);
+      alert('Movimiento registrado correctamente');
+    } catch (err) {
+      console.error('Error registrando movimiento:', err);
+      alert('Error al registrar el movimiento: ' + (err instanceof Error ? err.message : 'Error desconocido'));
+    } finally {
+      setRegisterLoading(false);
     }
-    
-    const newEgreso = {
-      id: egresos.length + 1,
-      date: newExpense.date.split('-').reverse().join('/'),
-      concept: newExpense.concept,
-      amount: parseFloat(newExpense.amount),
-      type: newExpense.type === "compra" ? "Compra" : 
-            newExpense.type === "servicios" ? "Servicios" :
-            newExpense.type === "nomina" ? "Nómina" :
-            newExpense.type === "alquiler" ? "Alquiler" :
-            newExpense.type === "mantenimiento" ? "Mantenimiento" : "Otros"
-    };
-    
-    setEgresos([newEgreso, ...egresos]);
-    alert(`Gasto registrado: ${newExpense.concept} - S/ ${newExpense.amount}\nFecha: ${newExpense.date}`);
-    setNewExpense({ concept: "", amount: "", type: "", description: "", date: new Date().toISOString().split('T')[0] });
   };
 
-  const handleSendEmail = () => {
-    if (!filterStartDate && !filterEndDate) {
-      alert("Por favor seleccione al menos una fecha para generar el reporte");
-      return;
-    }
-    
-    // Crear un nuevo libro de Excel
-    const wb = XLSX.utils.book_new();
-    
-    // Preparar datos para la hoja de Ingresos
-    const ingresosData = filteredIngresos.map(item => ({
-      'Fecha': item.date,
-      'Concepto': item.concept,
-      'Tipo': item.type,
-      'Monto': item.amount
-    }));
-    
-    // Preparar datos para la hoja de Egresos
-    const egresosData = filteredEgresos.map(item => ({
-      'Fecha': item.date,
-      'Concepto': item.concept,
-      'Tipo': item.type,
-      'Monto': item.amount
-    }));
-    
-    // Preparar datos para la hoja de Resumen
-    const resumenData = [
-      { 'Concepto': 'Total Ingresos', 'Monto': totalIngresos },
-      { 'Concepto': 'Total Egresos', 'Monto': totalEgresos },
-      { 'Concepto': 'Balance', 'Monto': balance },
-      { 'Concepto': '', 'Monto': '' },
-      { 'Concepto': 'Desgloses de Egresos', 'Monto': '' },
-      { 'Concepto': 'Compras', 'Monto': filteredEgresos.filter(e => e.type === 'Compra').reduce((sum, e) => sum + e.amount, 0) },
-      { 'Concepto': 'Servicios', 'Monto': filteredEgresos.filter(e => e.type === 'Servicios').reduce((sum, e) => sum + e.amount, 0) },
-      { 'Concepto': 'Nómina', 'Monto': filteredEgresos.filter(e => e.type === 'Nómina').reduce((sum, e) => sum + e.amount, 0) },
-      { 'Concepto': 'Mantenimiento', 'Monto': filteredEgresos.filter(e => e.type === 'Mantenimiento').reduce((sum, e) => sum + e.amount, 0) }
-    ];
-    
-    // Crear hojas del libro
-    const wsIngresos = XLSX.utils.json_to_sheet(ingresosData);
-    const wsEgresos = XLSX.utils.json_to_sheet(egresosData);
-    const wsResumen = XLSX.utils.json_to_sheet(resumenData);
-    
-    // Ajustar ancho de columnas
-    const colWidth = [{ wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 15 }];
-    wsIngresos['!cols'] = colWidth;
-    wsEgresos['!cols'] = colWidth;
-    wsResumen['!cols'] = [{ wch: 25 }, { wch: 15 }];
-    
-    // Agregar hojas al libro
-    XLSX.utils.book_append_sheet(wb, wsIngresos, "Ingresos");
-    XLSX.utils.book_append_sheet(wb, wsEgresos, "Egresos");
-    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
-    
-    // Generar archivo y descargarlo
-    const fechaInicio = filterStartDate || "Inicio";
-    const fechaFin = filterEndDate || "Fin";
-    const nombreArchivo = `Reporte_Contabilidad_${fechaInicio}_${fechaFin}.xlsx`;
-    
-    XLSX.writeFile(wb, nombreArchivo);
-    alert(`Reporte generado y descargado: ${nombreArchivo}`);
+  const formatFecha = (raw: string | undefined) => {
+    if (!raw) return '-';
+    const date = new Date(raw);
+    return isNaN(date.getTime()) ? String(raw) : `${date.toLocaleDateString('es-PE')} ${date.toLocaleTimeString('es-PE')}`;
   };
-
-  const handleReceipt = () => {
-    const remesado = parseFloat(montoRemesado) || 0;
-    const dejado = parseFloat(montoDejado) || 0;
-    const total = remesado + dejado;
-    
-    alert(`Monto Total: S/ ${total.toFixed(2)}\nRemesado: S/ ${remesado.toFixed(2)}\nDejado: S/ ${dejado.toFixed(2)}`);
-  };
-
-  // Detalle por día
-  const getDetailByDate = () => {
-    if (!selectedDate) return null;
-    
-    // Convertir formato YYYY-MM-DD a DD/MM/YYYY
-    const [year, month, day] = selectedDate.split('-');
-    const formattedDate = `${day}/${month}/${year}`;
-    
-    const ingresosDelDia = ingresos.filter(i => i.date === formattedDate);
-    const egresosDelDia = egresos.filter(e => e.date === formattedDate);
-    const totalIngresosDelDia = ingresosDelDia.reduce((sum, i) => sum + i.amount, 0);
-    const totalEgresosDelDia = egresosDelDia.reduce((sum, e) => sum + e.amount, 0);
-    
-    return {
-      ingresos: ingresosDelDia,
-      egresos: egresosDelDia,
-      totalIngresos: totalIngresosDelDia,
-      totalEgresos: totalEgresosDelDia,
-      balance: totalIngresosDelDia - totalEgresosDelDia,
-      date: formattedDate
-    };
-  };
-
-  const detalleDia = getDetailByDate();
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 style={{ color: '#9AAD97' }}>Módulo de Contabilidad</h2>
-          <p className="text-muted-foreground">Gestión financiera y reportes contables</p>
+          <p className="text-muted-foreground">Gestión de cuentas contables y movimientos</p>
         </div>
-        {/* Botón comentado: Agregar Gasto
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button style={{ backgroundColor: '#D5B888', color: 'white', border: 'none' }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Agregar Gasto
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Registrar Nuevo Gasto</DialogTitle>
-              <DialogDescription>
-                Complete la información del gasto a registrar
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Concepto *</Label>
-                <Input
-                  placeholder="Ej: Pago de servicios, Salarios, Compra de suministros"
-                  value={newExpense.concept}
-                  onChange={(e) => setNewExpense({ ...newExpense, concept: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Tipo de Gasto *</Label>
-                <Select value={newExpense.type} onValueChange={(value: any) => setNewExpense({ ...newExpense, type: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="compra">Compra de Inventario</SelectItem>
-                    <SelectItem value="servicios">Servicios (Luz, Agua, Internet)</SelectItem>
-                    <SelectItem value="nomina">Nómina y Salarios</SelectItem>
-                    <SelectItem value="alquiler">Alquiler</SelectItem>
-                    <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
-                    <SelectItem value="otros">Otros Gastos</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Monto *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={newExpense.amount}
-                  onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Fecha *</Label>
-                <Input
-                  type="date"
-                  value={newExpense.date}
-                  onChange={(e) => setNewExpense({ ...newExpense, date: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Descripción (opcional)</Label>
-                <Textarea
-                  placeholder="Detalles adicionales del gasto"
-                  value={newExpense.description}
-                  onChange={(e) => setNewExpense({ ...newExpense, description: e.target.value })}
-                />
-              </div>
-              <Button className="w-full" onClick={handleAddExpense} style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}>
-                Registrar Gasto
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-        */}</div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={loadAll}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
+          <Button
+            style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
+            onClick={() => setShowRegisterDialog(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Registrar Movimiento
+          </Button>
+        </div>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {error && (
+        <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+          <p className="font-medium">Error al cargar datos</p>
+          <p>{error}</p>
+        </div>
+      )}
+
+      {/* Resumen superior */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card style={{ borderTop: '4px solid #9AAD97' }}>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
@@ -341,8 +204,8 @@ export function ContabilidadModule() {
                 <TrendingUp className="h-6 w-6" style={{ color: '#9AAD97' }} />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Ingresos</p>
-                <p className="text-xl" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {totalIngresos.toFixed(2)}</p>
+                <p className="text-sm text-muted-foreground">Cuenta 10 - Ingresos</p>
+                <p className="text-2xl" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {saldoIngresos.toFixed(2)}</p>
               </div>
             </div>
           </CardContent>
@@ -355,8 +218,8 @@ export function ContabilidadModule() {
                 <TrendingDown className="h-6 w-6" style={{ color: '#D5B888' }} />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Egresos</p>
-                <p className="text-xl" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {totalEgresos.toFixed(2)}</p>
+                <p className="text-sm text-muted-foreground">Cuenta 50 - Egresos</p>
+                <p className="text-2xl" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {saldoEgresos.toFixed(2)}</p>
               </div>
             </div>
           </CardContent>
@@ -370,414 +233,196 @@ export function ContabilidadModule() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Balance</p>
-                <p className="text-xl" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {balance.toFixed(2)}</p>
+                <p className="text-2xl" style={{ color: balance >= 0 ? '#9AAD97' : '#D5B888', fontWeight: 'bold' }}>
+                  S/ {balance.toFixed(2)}
+                </p>
               </div>
             </div>
           </CardContent>
         </Card>
-
-        {/* Card comentado: Utilidad Neta
-        <Card style={{ borderTop: '4px solid #D5B888' }}>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-lg" style={{ backgroundColor: 'rgba(213, 184, 136, 0.1)' }}>
-                <Receipt className="h-6 w-6" style={{ color: '#D5B888' }} />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Utilidad Neta</p>
-                <p className="text-xl" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {utilidadNeta.toFixed(2)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        */}
       </div>
 
-      <Tabs defaultValue="movimientos">
-        <TabsList>
-          <TabsTrigger value="movimientos">Movimientos</TabsTrigger>
-          {/* <TabsTrigger value="estado">Estado de Resultados</TabsTrigger> */}
-        </TabsList>
-
-        <TabsContent value="movimientos" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card style={{ borderTop: '4px solid #D5B888' }}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2" style={{ color: '#D5B888' }}>
-                  <TrendingUp className="h-5 w-5" />
-                  Ingresos Recientes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div style={{ maxHeight: '400px', overflowY: 'auto', overflowX: 'hidden' }}>
-                  <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Concepto</TableHead>
-                      <TableHead>Total</TableHead>
+      {/* Listado de cuentas */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Cuentas Contables</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Código</TableHead>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Cuenta Padre</TableHead>
+                  <TableHead className="text-right">Saldo</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cuentas.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
+                      No hay cuentas registradas
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  cuentas.map((cuenta) => (
+                    <TableRow key={cuenta.id_cuenta} className={cuenta.es_totalizadora ? 'bg-muted/50' : ''}>
+                      <TableCell className="font-medium">{cuenta.codigo}</TableCell>
+                      <TableCell>{cuenta.nombre}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          cuenta.tipo === 'INGRESO' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {cuenta.tipo}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{cuenta.cuenta_padre || '-'}</TableCell>
+                      <TableCell className="text-right font-semibold">S/ {Number(cuenta.saldo ?? 0).toFixed(2)}</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredIngresos.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{new Date(item.date).toLocaleDateString('es-PE')}</TableCell>
-                        <TableCell>
-                          <p className="text-sm">{item.concept}</p>
-                        </TableCell>
-                        <TableCell style={{ color: '#9AAD97', fontWeight: 'bold' }}>
-                          + S/ {(item.total || 0).toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card style={{ borderTop: '4px solid #9AAD97' }}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2" style={{ color: '#9AAD97' }}>
-                  <TrendingDown className="h-5 w-5" />
-                  Egresos Recientes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div style={{ maxHeight: '400px', overflowY: 'auto', overflowX: 'hidden' }}>
-                  <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Precio Compra</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredEgresos.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{item.id}</TableCell>
-                        <TableCell>
-                          <p className="text-sm">{item.concept}</p>
-                        </TableCell>
-                        <TableCell style={{ color: '#D5B888', fontWeight: 'bold' }}>
-                          - S/ {(item.amount || 0).toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Tab comentada: Estado de Resultados
-        <TabsContent value="estado">
-          <Card style={{ borderTop: '4px solid #D5B888' }}>
-            <CardHeader>
-              <CardTitle style={{ color: '#D5B888' }}>Estado de Resultados - Octubre 2025</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span>Ventas Brutas</span>
-                    <span>S/ {estadoResultados.ventasBrutas.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-red-600">
-                    <span>(-) Costo de Ventas</span>
-                    <span>S/ {estadoResultados.costoVentas.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-t pt-2">
-                    <span>Utilidad Bruta</span>
-                    <span>S/ {utilidadBruta.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center text-red-600">
-                    <span>(-) Gastos Operativos</span>
-                    <span>S/ {estadoResultados.gastoOperativos.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-t pt-2">
-                    <span>Utilidad Operativa</span>
-                    <span>S/ {utilidadOperativa.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center text-red-600">
-                    <span>(-) Gastos Administrativos</span>
-                    <span>S/ {estadoResultados.gastosAdmin.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-red-600">
-                    <span>(-) Otros Gastos</span>
-                    <span>S/ {estadoResultados.otrosGastos.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-t-2 pt-3">
-                    <span>Utilidad Neta</span>
-                    <span className="text-green-600">S/ {utilidadNeta.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <div className="mt-6 p-4 bg-muted rounded-lg">
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Margen Bruto</p>
-                      <p>{((utilidadBruta / estadoResultados.ventasBrutas) * 100).toFixed(1)}%</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Margen Operativo</p>
-                      <p>{((utilidadOperativa / estadoResultados.ventasBrutas) * 100).toFixed(1)}%</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Margen Neto</p>
-                      <p>{((utilidadNeta / estadoResultados.ventasBrutas) * 100).toFixed(1)}%</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        */}
-      </Tabs>
-
-      <div className="space-y-4">
-        {/* Ventanas comentadas: Filtrar por Fecha, Detalle por Día, Registrar Recibo
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-gray-600" />
-                Filtrar por Fecha
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label>Fecha Inicial</Label>
-                  <Input
-                    type="date"
-                    value={filterStartDate}
-                    onChange={(e) => setFilterStartDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label>Fecha Final</Label>
-                  <Input
-                    type="date"
-                    value={filterEndDate}
-                    onChange={(e) => setFilterEndDate(e.target.value)}
-                  />
-                </div>
-                <Button 
-                  className="w-full" 
-                  onClick={handleSendEmail}
-                  style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Descargar Excel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-gray-600" />
-                Detalle por Día
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label>Seleccionar Fecha</Label>
-                  <Input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                  />
-                </div>
-                {detalleDia && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="p-3 rounded-lg bg-green-50 border border-green-200">
-                        <p className="text-xs text-muted-foreground">Ingresos</p>
-                        <p className="text-lg font-bold text-green-600">S/ {detalleDia.totalIngresos.toFixed(2)}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                        <p className="text-xs text-muted-foreground">Egresos</p>
-                        <p className="text-lg font-bold text-red-600">S/ {detalleDia.totalEgresos.toFixed(2)}</p>
-                      </div>
-                      <div className={`p-3 rounded-lg border ${detalleDia.balance >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
-                        <p className="text-xs text-muted-foreground">Balance</p>
-                        <p className={`text-lg font-bold ${detalleDia.balance >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                          S/ {detalleDia.balance.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {detalleDia.ingresos.length > 0 && (
-                      <div className="border-t pt-4">
-                        <h3 className="font-semibold text-green-600 mb-2 text-sm">Ingresos del día ({detalleDia.ingresos.length})</h3>
-                        <Table className="text-xs">
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Concepto</TableHead>
-                              <TableHead className="text-right">Monto</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {detalleDia.ingresos.map((item, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell>{item.concept}</TableCell>
-                                <TableCell className="text-right text-green-600 font-semibold">S/ {item.amount.toFixed(2)}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                    
-                    {detalleDia.egresos.length > 0 && (
-                      <div className="border-t pt-4">
-                        <h3 className="font-semibold text-red-600 mb-2 text-sm">Egresos del día ({detalleDia.egresos.length})</h3>
-                        <Table className="text-xs">
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Concepto</TableHead>
-                              <TableHead className="text-right">Monto</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {detalleDia.egresos.map((item, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell>{item.concept}</TableCell>
-                                <TableCell className="text-right text-red-600 font-semibold">S/ {item.amount.toFixed(2)}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                    
-                    {detalleDia.ingresos.length === 0 && detalleDia.egresos.length === 0 && (
-                      <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center text-muted-foreground">
-                        <p>No hay movimientos registrados para esta fecha</p>
-                      </div>
-                    )}
-                  </div>
+                  ))
                 )}
-              </div>
-            </CardContent>
-          </Card>
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Receipt className="h-5 w-5 text-gray-600" />
-                Registrar Recibo
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label>Monto Remesado</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={montoRemesado}
-                    onChange={(e) => setMontoRemesado(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label>Monto Dejado</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={montoDejado}
-                    onChange={(e) => setMontoDejado(e.target.value)}
-                  />
-                </div>
-                <Button 
-                  className="w-full" 
-                  onClick={handleReceipt}
-                  style={{ backgroundColor: '#D5B888', color: 'white', border: 'none' }}
-                >
-                  Registrar Recibo
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-        */}
+      {/* Listado de movimientos */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Movimientos Contables</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fecha y Hora</TableHead>
+                  <TableHead>Cuenta</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Concepto</TableHead>
+                  <TableHead>Usuario</TableHead>
+                  <TableHead>Origen</TableHead>
+                  <TableHead className="text-right">Monto</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {movimientos.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-4 text-muted-foreground">
+                      No hay movimientos registrados
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  movimientos.map((mov, idx) => (
+                    <TableRow key={mov.id_movimiento ?? idx}>
+                      <TableCell className="whitespace-nowrap">{formatFecha(mov.fecha_hora)}</TableCell>
+                      <TableCell>{mov.cuenta || '-'}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          mov.tipo === 'INGRESO' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {mov.tipo}
+                        </span>
+                      </TableCell>
+                      <TableCell>{mov.concepto}</TableCell>
+                      <TableCell>{mov.usuario}</TableCell>
+                      <TableCell className="text-muted-foreground text-xs">{mov.origen || 'MANUAL'}</TableCell>
+                      <TableCell className={`text-right font-semibold ${
+                        mov.tipo === 'INGRESO' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {mov.tipo === 'INGRESO' ? '+' : '-'} S/ {Math.abs(Number(mov.monto ?? 0)).toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Reporte de Gastos por Categoría comentado
-        <Card style={{ borderTop: '4px solid #D5B888' }}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2" style={{ color: '#D5B888' }}>
-              <TrendingDown className="h-5 w-5" />
-              Reporte de Gastos por Categoría
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="p-4 rounded-lg border border-blue-200 bg-blue-50">
-                <p className="text-sm text-muted-foreground">Compras de Inventario</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  S/ {filteredEgresos.filter(e => e.type === "Compra").reduce((sum, e) => sum + e.amount, 0).toFixed(2)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {filteredEgresos.filter(e => e.type === "Compra").length} movimientos
-                </p>
-              </div>
-              <div className="p-4 rounded-lg border border-purple-200 bg-purple-50">
-                <p className="text-sm text-muted-foreground">Servicios</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  S/ {filteredEgresos.filter(e => e.type === "Servicios").reduce((sum, e) => sum + e.amount, 0).toFixed(2)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {filteredEgresos.filter(e => e.type === "Servicios").length} movimientos
-                </p>
-              </div>
-              <div className="p-4 rounded-lg border border-red-200 bg-red-50">
-                <p className="text-sm text-muted-foreground">Nómina</p>
-                <p className="text-2xl font-bold text-red-600">
-                  S/ {filteredEgresos.filter(e => e.type === "Nómina").reduce((sum, e) => sum + e.amount, 0).toFixed(2)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {filteredEgresos.filter(e => e.type === "Nómina").length} movimientos
-                </p>
-              </div>
-              <div className="p-4 rounded-lg border border-yellow-200 bg-yellow-50">
-                <p className="text-sm text-muted-foreground">Mantenimiento</p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  S/ {filteredEgresos.filter(e => e.type === "Mantenimiento").reduce((sum, e) => sum + e.amount, 0).toFixed(2)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {filteredEgresos.filter(e => e.type === "Mantenimiento").length} movimientos
-                </p>
-              </div>
-              <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
-                <p className="text-sm text-muted-foreground">Total Egresos</p>
-                <p className="text-2xl font-bold text-gray-600">
-                  S/ {totalEgresos.toFixed(2)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {filteredEgresos.length} movimientos
-                </p>
+      {/* Diálogo para registrar movimiento */}
+      <Dialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Registrar Movimiento Contable</DialogTitle>
+            <DialogDescription>
+              Registre un ingreso o egreso en la cuenta contable correspondiente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <Label>Cuenta Contable *</Label>
+              <Select
+                value={newMovement.id_cuenta}
+                onValueChange={(value) => setNewMovement({ ...newMovement, id_cuenta: value })}
+              >
+                <SelectTrigger className="w-full mt-2">
+                  <SelectValue placeholder="Seleccionar cuenta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cuentas
+                    .filter(c => !c.es_totalizadora)
+                    .map((cuenta) => (
+                      <SelectItem key={cuenta.id_cuenta} value={String(cuenta.id_cuenta)}>
+                        {cuenta.codigo} - {cuenta.nombre}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Tipo de Movimiento *</Label>
+              <Select
+                value={newMovement.tipo}
+                onValueChange={(value: 'INGRESO' | 'EGRESO') => setNewMovement({ ...newMovement, tipo: value })}
+              >
+                <SelectTrigger className="w-full mt-2">
+                  <SelectValue placeholder="Seleccionar tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INGRESO">Ingreso</SelectItem>
+                  <SelectItem value="EGRESO">Egreso</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Monto *</Label>
+              <div className="relative mt-2">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={newMovement.monto}
+                  onChange={(e) => setNewMovement({ ...newMovement, monto: e.target.value })}
+                  className="pl-10"
+                />
               </div>
             </div>
-          </CardContent>
-        </Card>
-        */}
-      </div>
+            <div>
+              <Label>Concepto *</Label>
+              <Textarea
+                placeholder="Ej: Pago de servicios, venta adicional, etc."
+                value={newMovement.concepto}
+                onChange={(e) => setNewMovement({ ...newMovement, concepto: e.target.value })}
+                rows={3}
+              />
+            </div>
+            <Button
+              className="w-full"
+              style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
+              onClick={handleRegisterMovement}
+              disabled={registerLoading}
+            >
+              {registerLoading ? 'Guardando...' : 'Registrar Movimiento'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

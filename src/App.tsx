@@ -82,7 +82,7 @@ export default function App() {
       case "inventario":
         return <InventarioModule />;
       case "contabilidad":
-        return <ContabilidadModule />;
+        return currentUser ? <ContabilidadModule currentUser={currentUser} /> : null;
       case "usuarios":
         return <UsuariosModule />;
       case "proveedores":

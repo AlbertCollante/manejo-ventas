@@ -1521,9 +1521,10 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                 <TableRow className="hover:bg-transparent">
                   <TableHead style={{ color: COLOR_SAGE }}>Producto</TableHead>
                   <TableHead className="w-28" style={{ color: COLOR_SAGE }}>Cant. Pedida</TableHead>
-                  <TableHead className="w-44" style={{ color: COLOR_SAGE }}>Precio Unitario</TableHead>
-                  <TableHead className="w-28" style={{ color: COLOR_SAGE }}>Bonif. Esperada</TableHead>
-                  <TableHead style={{ color: COLOR_SAGE }}>Promoción</TableHead>
+                  <TableHead className="w-44" style={{ color: COLOR_SAGE }}>Costo Unitario</TableHead>
+                  <TableHead className="w-36" style={{ color: COLOR_SAGE }}>Subtotal</TableHead>
+                  <TableHead className="w-28" style={{ color: COLOR_SAGE }}>Cant. Bonif. Esperada</TableHead>
+                  <TableHead style={{ color: COLOR_SAGE }}>Descripcion de Bonificacion</TableHead>
                   <TableHead className="w-16"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -1560,6 +1561,16 @@ export function ProveedoresModule({ currentUser }: ProveedoresModuleProps) {
                           onChange={(e) => updateLinea(idx, "precio_unitario", parseFloat(e.target.value) || 0)}
                           className="border-0 rounded-none focus-visible:ring-0 bg-[#faf9f7]"
                         />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex rounded-md overflow-hidden border border-[#e5e1d8] bg-[#f0ece3]">
+                        <div className="px-3 py-2 border-r border-[#e5e1d8] text-sm text-[#7a7569] flex items-center">
+                          S/
+                        </div>
+                        <div className="px-3 py-2 text-sm font-semibold flex items-center" style={{ color: COLOR_SAGE }}>
+                          {(linea.cantidad_pedida * linea.precio_unitario).toFixed(2)}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>

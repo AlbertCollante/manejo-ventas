@@ -600,6 +600,16 @@ export function InventarioModule() {
                     />
                   </div>
 
+                  <div>
+                    <Label style={{ color: '#9AAD97' }}>Stock Inicial</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="100 (si se deja vacío usa el stock actual)" 
+                      value={newProduct.stock_inicial}
+                      onChange={(e) => setNewProduct({...newProduct, stock_inicial: parseInt(e.target.value) || 0})}
+                    />
+                  </div>
+
                   {/* Stock */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -629,19 +639,11 @@ export function InventarioModule() {
                   </div>
 
                   {/* Stock Inicial */}
-                  <div>
-                    <Label style={{ color: '#9AAD97' }}>Stock Inicial</Label>
-                    <Input 
-                      type="number" 
-                      placeholder="100 (si se deja vacío usa el stock actual)" 
-                      value={newProduct.stock_inicial}
-                      onChange={(e) => setNewProduct({...newProduct, stock_inicial: parseInt(e.target.value) || 0})}
-                    />
-                  </div>
+                  
 
                   {/* Vencimiento */}
                   <div>
-                    <Label style={{ color: '#9AAD97' }}>Fecha de Vencimiento (MM/YYYY) *</Label>
+                    <Label style={{ color: '#9AAD97' }}>Fecha de Vencimiento (MM/YYYY)</Label>
                     <Input 
                       type="month"
                       value={newProduct.vencimiento ? 
@@ -666,9 +668,9 @@ export function InventarioModule() {
                   </div>
 
                   {/* Precios */}
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label style={{ color: '#D5B888' }}>Costo de Compra *</Label>
+                      <Label style={{ color: '#D5B888' }}>Costo Unitario *</Label>
                       <div className="relative mt-2">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                         <Input 
@@ -677,6 +679,26 @@ export function InventarioModule() {
                           placeholder="0.00" 
                           value={newProduct.costo_compra}
                           onChange={(e) => setNewProduct({...newProduct, costo_compra: parseFloat(e.target.value) || 0})}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label style={{ color: '#D5B888' }}>Costo x Caja *</Label>
+                      <div className="relative mt-2">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          placeholder="0.00" 
+                          value={newProduct.precio_caja}
+                          onChange={(e) => {
+                            const newPrecioCaja = parseFloat(e.target.value) || 0;
+                            const calcCostoCompra = newPrecioCaja > 0 && newProduct.stock_actual > 0
+                              ? Math.round((newPrecioCaja / newProduct.stock_actual) * 100) / 100
+                              : newProduct.costo_compra;
+                            setNewProduct({...newProduct, precio_caja: newPrecioCaja, costo_compra: calcCostoCompra});
+                          }}
                           className="pl-10"
                         />
                       </div>
@@ -696,21 +718,15 @@ export function InventarioModule() {
                       </div>
                     </div>
                     <div>
-                      <Label style={{ color: '#D5B888' }}>Precio Caja Compra *</Label>
+                      <Label style={{ color: '#9AAD97' }}>Precio Blister *</Label>
                       <div className="relative mt-2">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                         <Input 
                           type="number" 
                           step="0.01" 
                           placeholder="0.00" 
-                          value={newProduct.precio_caja}
-                          onChange={(e) => {
-                            const newPrecioCaja = parseFloat(e.target.value) || 0;
-                            const calcCostoCompra = newPrecioCaja > 0 && newProduct.stock_actual > 0
-                              ? Math.round((newPrecioCaja / newProduct.stock_actual) * 100) / 100
-                              : newProduct.costo_compra;
-                            setNewProduct({...newProduct, precio_caja: newPrecioCaja, costo_compra: calcCostoCompra});
-                          }}
+                          value={newProduct.precio_unitario}
+                          onChange={(e) => setNewProduct({...newProduct, precio_unitario: parseFloat(e.target.value) || 0})}
                           className="pl-10"
                         />
                       </div>
@@ -884,12 +900,12 @@ export function InventarioModule() {
                   <th className="px-2 py-2 text-left font-medium">Nombre</th>
                   <th className="px-2 py-2 text-left font-medium">Categoría</th>
                   <th className="px-2 py-2 text-left font-medium">Marca</th>
-                  <th className="px-2 py-2 text-left font-medium">Stock Actual</th>
                   <th className="px-2 py-2 text-left font-medium">Stock Inicial</th>
+                  <th className="px-2 py-2 text-left font-medium">Stock Actual</th>
                   <th className="px-2 py-2 text-left font-medium">Stock Mínimo</th>
                   <th className="px-2 py-2 text-left font-medium">Estado</th>
-                  <th className="px-2 py-2 text-left font-medium">Precio Caja</th>
-                  <th className="px-2 py-2 text-left font-medium">Costo Compra</th>
+                  <th className="px-2 py-2 text-left font-medium">Costo Caja</th>
+                  <th className="px-2 py-2 text-left font-medium">Costo Unitario</th>
                   <th className="px-2 py-2 text-left font-medium">Precio Unitario</th>
                   <th className="px-2 py-2 text-left font-medium">Precio Blíster</th>
                   <th className="px-2 py-2 text-left font-medium">Vencimiento</th>
@@ -907,8 +923,8 @@ export function InventarioModule() {
                     <td className="px-2 py-2">{product.name}</td>
                     <td className="px-2 py-2">{product.category}</td>
                     <td className="px-2 py-2">{product.brand}</td>
-                    <td className="px-2 py-2">{product.stock}</td>
                     <td className="px-2 py-2">{product.stockInicial}</td>
+                    <td className="px-2 py-2">{product.stock}</td>
                     <td className="px-2 py-2">{product.minStock}</td>
                     <td className="px-2 py-2">{product.estado}</td>
                     <td className="px-2 py-2" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {((product.precio_caja ?? product.priceBox) || 0).toFixed(2)}</td>
@@ -982,7 +998,7 @@ export function InventarioModule() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label style={{ color: '#9AAD97' }}>Stock</Label>
+                  <Label style={{ color: '#9AAD97' }}>Stock Actual</Label>
                   <Input type="number" value={editingProduct.stock} onChange={(e) => setEditingProduct({...editingProduct, stock: parseInt(e.target.value) || 0})} />
                 </div>
                 <div>
@@ -998,14 +1014,21 @@ export function InventarioModule() {
                 <Label style={{ color: '#9AAD97' }}>Vencimiento (MM/YYYY)</Label>
                 <Input value={editingProduct.expiry} onChange={(e) => setEditingProduct({...editingProduct, expiry: e.target.value})} placeholder="MM/YYYY" />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label style={{ color: '#D5B888' }}>Costo Compra</Label>
+                  <Label style={{ color: '#D5B888' }}>Costo Unitario</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                     <Input type="number" step="0.01" value={editingProduct.purchasePrice} onChange={(e) => setEditingProduct({...editingProduct, purchasePrice: parseFloat(e.target.value) || 0})} className="pl-10" />
                   </div>
                 </div>
+                <div>
+                <Label style={{ color: '#9AAD97' }}>Costo x Caja</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
+                  <Input type="number" step="0.01" value={editingProduct.priceBox} onChange={(e) => setEditingProduct({...editingProduct, priceBox: parseFloat(e.target.value) || 0})} className="pl-10" />
+                </div>
+              </div>
                 <div>
                   <Label style={{ color: '#9AAD97' }}>Precio Unitario</Label>
                   <div className="relative">
@@ -1013,6 +1036,7 @@ export function InventarioModule() {
                     <Input type="number" step="0.01" value={editingProduct.priceUnit} onChange={(e) => setEditingProduct({...editingProduct, priceUnit: parseFloat(e.target.value) || 0})} className="pl-10" />
                   </div>
                 </div>
+                
                 <div>
                   <Label style={{ color: '#D5B888' }}>Precio Blíster</Label>
                   <div className="relative">
@@ -1021,13 +1045,7 @@ export function InventarioModule() {
                   </div>
                 </div>
               </div>
-              <div>
-                <Label style={{ color: '#9AAD97' }}>Precio Caja Compra</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
-                  <Input type="number" step="0.01" value={editingProduct.priceBox} onChange={(e) => setEditingProduct({...editingProduct, priceBox: parseFloat(e.target.value) || 0})} className="pl-10" />
-                </div>
-              </div>
+              
               <Button 
                 className="w-full" 
                 onClick={handleUpdateProduct}

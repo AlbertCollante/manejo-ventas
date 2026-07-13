@@ -1017,8 +1017,8 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
         saleToShow = { ...saleInfo, id: idventa, items: cart };
       }
 
-      setLastSaleData(saleToShow);
-      setShowVoucherDialog(true);
+      finalizeSale();
+      alert('Venta registrada correctamente');
     } catch (error) {
       console.error('completeSale error:', error);
       alert('Error al procesar la venta');
