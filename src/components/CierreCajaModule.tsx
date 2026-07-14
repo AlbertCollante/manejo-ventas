@@ -55,6 +55,11 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const [moveAmount, setMoveAmount] = useState("");
   const [moveFrom, setMoveFrom] = useState<"efectivo" | "yape">("efectivo");
   const [moveTo, setMoveTo] = useState<"efectivo" | "yape">("yape");
+  const [moveHasCommission, setMoveHasCommission] = useState(false);
+  const [moveCommissionAmount, setMoveCommissionAmount] = useState("");
+  const [moveCommissionAccount, setMoveCommissionAccount] = useState<"efectivo" | "yape">("efectivo");
+  const [moveObservations, setMoveObservations] = useState("");
+  const [totalCommissions, setTotalCommissions] = useState(0);
   const [moveLoading, setMoveLoading] = useState(false);
   const [showMovementsDialog, setShowMovementsDialog] = useState(false);
   const [movementsList, setMovementsList] = useState<any[]>([]);
@@ -422,35 +427,44 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       return;
     }
 
+    const commission = moveHasCommission ? parseFloat(moveCommissionAmount) : 0;
+    if (moveHasCommission && (isNaN(commission) || commission <= 0)) {
+      alert('Ingrese un monto de comisión válido mayor a 0');
+      return;
+    }
+
     const sourceBalance = moveFrom === 'efectivo' ? cuentaEfectivo : cuentaYape;
     if (amount > sourceBalance) {
-      alert(`Saldo insuficiente en cuenta ${moveFrom}. Disponible: S/ ${sourceBalance.toFixed(2)}`);
+      alert(`Saldo insuficiente en cuenta ${moveFrom}. Disponible: S/ ${sourceBalance.toFixed(2)}. Necesita: S/ ${amount.toFixed(2)}`);
       return;
     }
 
     setMoveLoading(true);
     try {
-      const [subtractResp, addResp] = await Promise.all([
-        fetch(`${API_BASE}/actualizar-cuenta-${moveFrom}/${aperturaDelDia.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ monto: -amount })
-        }),
-        fetch(`${API_BASE}/actualizar-cuenta-${moveTo}/${aperturaDelDia.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ monto: amount })
-        })
-      ]);
+      // Consolidar actualizaciones por cuenta para evitar condiciones de carrera
+      // cuando la comisión va a la misma cuenta de origen o destino
+      const updates: Record<string, number> = {};
+      updates[moveFrom] = (updates[moveFrom] || 0) - amount;
+      updates[moveTo] = (updates[moveTo] || 0) + amount;
+      if (commission > 0) {
+        updates[moveCommissionAccount] = (updates[moveCommissionAccount] || 0) + commission;
+      }
 
-      if (!subtractResp.ok) {
-        const txt = await subtractResp.text();
-        throw new Error(`Error restando de cuenta origen: ${txt}`);
-      }
-      if (!addResp.ok) {
-        const txt = await addResp.text();
-        throw new Error(`Error sumando a cuenta destino: ${txt}`);
-      }
+      const requests = Object.entries(updates).map(([account, monto]) =>
+        fetch(`${API_BASE}/actualizar-cuenta-${account}/${aperturaDelDia.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ monto })
+        })
+      );
+
+      const responses = await Promise.all(requests);
+
+      responses.forEach((resp, index) => {
+        if (!resp.ok) {
+          throw new Error(`Error en operación ${index + 1}: ${resp.statusText}`);
+        }
+      });
 
       // Registrar el movimiento en el historial
       const movimientoResp = await fetch(`${API_BASE}/movimientos-cuenta`, {
@@ -461,8 +475,10 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
           cuenta_origen: moveFrom === 'efectivo' ? 'EFECTIVO' : 'YAPE',
           cuenta_destino: moveTo === 'efectivo' ? 'EFECTIVO' : 'YAPE',
           monto: amount,
+          comision: commission,
+          cuenta_comision: commission > 0 ? (moveCommissionAccount === 'efectivo' ? 'EFECTIVO' : 'YAPE') : null,
           usuario: currentUser.name,
-          observaciones: `Movimiento de ${moveFrom} a ${moveTo}`
+          observaciones: moveObservations.trim() || `Movimiento de ${moveFrom} a ${moveTo}${commission > 0 ? ` con comisión S/ ${commission.toFixed(2)}` : ''}`
         })
       });
 
@@ -471,11 +487,19 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
         console.error('Error registrando movimiento:', txt);
       }
 
+      if (commission > 0) {
+        setTotalCommissions((prev) => prev + commission);
+      }
+
       // Recargar apertura para actualizar saldos
       await fetchOpenApertura();
       setMoveAmount("");
+      setMoveHasCommission(false);
+      setMoveCommissionAmount("");
+      setMoveCommissionAccount("efectivo");
+      setMoveObservations("");
       setShowMoveDialog(false);
-      alert(`Movimiento realizado: S/ ${amount.toFixed(2)} de ${moveFrom} a ${moveTo}`);
+      alert(`Movimiento realizado: S/ ${amount.toFixed(2)} de ${moveFrom} a ${moveTo}${commission > 0 ? ` (comisión S/ ${commission.toFixed(2)} a ${moveCommissionAccount})` : ''}`);
     } catch (error) {
       console.error('Error movimiento entre cuentas:', error);
       alert('Error al realizar el movimiento: ' + (error instanceof Error ? error.message : 'Error desconocido'));
@@ -536,8 +560,75 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
 
       await fetchCashClosures();
       await fetchOpenApertura();
+
+      // Calcular comisiones totales desde los movimientos registrados (más confiable que el estado local)
+      let commissionsToRegister = totalCommissions;
+      try {
+        const movimientosResp = await fetch(`${API_BASE}/movimientos-cuenta?id_apertura=${aperturaDelDia.id}`);
+        if (movimientosResp.ok) {
+          const movimientos = await movimientosResp.json();
+          const calculatedCommission = (Array.isArray(movimientos) ? movimientos : [])
+            .reduce((sum, m) => sum + Number(m.comision ?? 0), 0);
+          if (calculatedCommission > 0) {
+            commissionsToRegister = calculatedCommission;
+          }
+        }
+      } catch (e) {
+        console.error('Error calculando comisiones desde movimientos:', e);
+      }
+
+      // Registrar comisiones acumuladas en cuenta contable 1030 (Otros)
+      if (commissionsToRegister > 0) {
+        try {
+          const cuentasResp = await fetch(`${API_BASE}/cuentas-contables`);
+          if (!cuentasResp.ok) {
+            throw new Error(`Error obteniendo cuentas contables: ${cuentasResp.statusText}`);
+          }
+          const cuentas = await cuentasResp.json();
+          const cuenta1030 = Array.isArray(cuentas)
+            ? cuentas.find((c: any) =>
+                String(c.codigo) === '1030' ||
+                String(c.codigo) === '10.30' ||
+                Number(c.codigo) === 1030
+              )
+            : null;
+
+          if (!cuenta1030) {
+            console.warn('Cuentas contables disponibles:', cuentas);
+            throw new Error('No se encontró la cuenta contable 1030');
+          }
+
+          console.log('Cuenta 1030 encontrada:', cuenta1030);
+
+          const comisionPayload = {
+            id_cuenta: Number(cuenta1030.id_cuenta ?? cuenta1030.id),
+            monto: Number(commissionsToRegister),
+            tipo: 'INGRESO',
+            concepto: 'comisiones',
+            usuario: currentUser.name || currentUser.username,
+          };
+          console.log('Enviando comisión a cuenta 1030:', comisionPayload);
+
+          const comisionResp = await fetch(`${API_BASE}/movimientos-contables`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(comisionPayload),
+          });
+
+          if (!comisionResp.ok) {
+            const txt = await comisionResp.text();
+            throw new Error(`Error registrando comisión: ${txt}`);
+          }
+        } catch (comisionErr) {
+          const msg = comisionErr instanceof Error ? comisionErr.message : 'Error desconocido';
+          console.error('Error enviando comisión a cuenta 1030:', comisionErr);
+          alert('Advertencia: el cierre se registró, pero no se pudo enviar la comisión a la cuenta 1030. ' + msg);
+        }
+      }
+
       setCajaCerrada(true);
-      alert(`Caja cerrada exitosamente\nVentas: ${ventasDelDia.length} | Servicios: ${serviciosDelDia.length}\nTotal Ventas: S/ ${totalVentas.toFixed(2)}\nTotal Servicios: S/ ${totalServicios.toFixed(2)}\nTotal Ingresos: S/ ${totalIngresos.toFixed(2)}\nTotal contado: S/ ${totalContado.toFixed(2)}\nDiferencia: S/ ${diferencia.toFixed(2)}\n\nCierre registrado en la base de datos`);
+      setTotalCommissions(0);
+      alert(`Caja cerrada exitosamente\nVentas: ${ventasDelDia.length} | Servicios: ${serviciosDelDia.length}\nTotal Ventas: S/ ${totalVentas.toFixed(2)}\nTotal Servicios: S/ ${totalServicios.toFixed(2)}\nTotal Ingresos: S/ ${totalIngresos.toFixed(2)}\nTotal contado: S/ ${totalContado.toFixed(2)}\nDiferencia: S/ ${diferencia.toFixed(2)}${commissionsToRegister > 0 ? `\nComisión registrada en cuenta 1030: S/ ${commissionsToRegister.toFixed(2)}` : ''}\n\nCierre registrado en la base de datos`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -1605,6 +1696,60 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                 Saldo disponible: S/ {moveFrom === 'efectivo' ? cuentaEfectivo.toFixed(2) : cuentaYape.toFixed(2)}
               </p>
             </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="hasCommission"
+                checked={moveHasCommission}
+                onChange={(e) => setMoveHasCommission(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-[#9AAD97] focus:ring-[#9AAD97]"
+              />
+              <Label htmlFor="hasCommission" className="cursor-pointer">¿Tiene comisión?</Label>
+            </div>
+
+            {moveHasCommission && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Monto de comisión</Label>
+                  <div className="relative mt-2">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={moveCommissionAmount}
+                      onChange={(e) => setMoveCommissionAmount(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Cuenta de comisión</Label>
+                  <Select value={moveCommissionAccount} onValueChange={(value: "efectivo" | "yape") => setMoveCommissionAccount(value)}>
+                    <SelectTrigger className="w-full mt-2">
+                      <SelectValue placeholder="Cuenta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="efectivo">Efectivo</SelectItem>
+                      <SelectItem value="yape">Yape</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <Label>Observaciones</Label>
+              <Textarea
+                placeholder="Notas sobre el movimiento..."
+                value={moveObservations}
+                onChange={(e) => setMoveObservations(e.target.value)}
+                rows={2}
+                className="mt-2"
+              />
+            </div>
+
             <Button
               className="w-full"
               style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
@@ -1640,6 +1785,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                       <th className="text-left py-2 px-2">Origen</th>
                       <th className="text-left py-2 px-2">Destino</th>
                       <th className="text-right py-2 px-2">Monto</th>
+                      <th className="text-right py-2 px-2">Comisión</th>
+                      <th className="text-left py-2 px-2">Cta. Comisión</th>
                       <th className="text-left py-2 px-2">Usuario</th>
                     </tr>
                   </thead>
@@ -1650,12 +1797,15 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                       const fecha = !isNaN(parsedDate.getTime())
                         ? `${parsedDate.toLocaleDateString('es-PE')} ${parsedDate.toLocaleTimeString('es-PE')}`
                         : String(rawFecha);
+                      const comision = Number(mov.comision ?? 0);
                       return (
                         <tr key={mov.id_movimiento ?? mov.id} className="border-b last:border-b-0">
                           <td className="py-2 px-2 whitespace-nowrap">{fecha}</td>
                           <td className="py-2 px-2">{mov.cuenta_origen}</td>
                           <td className="py-2 px-2">{mov.cuenta_destino}</td>
                           <td className="py-2 px-2 text-right font-semibold">S/ {Number(mov.monto ?? 0).toFixed(2)}</td>
+                          <td className="py-2 px-2 text-right">{comision > 0 ? `S/ ${comision.toFixed(2)}` : '-'}</td>
+                          <td className="py-2 px-2">{comision > 0 ? mov.cuenta_comision : '-'}</td>
                           <td className="py-2 px-2">{mov.usuario}</td>
                         </tr>
                       );

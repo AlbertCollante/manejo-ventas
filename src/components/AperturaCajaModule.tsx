@@ -27,7 +27,8 @@ interface Apertura {
 }
 
 export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
-  const [montoInicial, setMontoInicial] = useState("");
+  const [montoInicialEfectivo, setMontoInicialEfectivo] = useState("");
+  const [montoInicialYape, setMontoInicialYape] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [cajaAbierta, setCajaAbierta] = useState(false);
   const [datosApertura, setDatosApertura] = useState<Apertura | null>(null);
@@ -89,8 +90,12 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
   }, []);
 
   const handleAperturaCaja = async () => {
-    if (montoInicial === "" || parseFloat(montoInicial) < 0) {
-      alert("Por favor ingrese un monto válido");
+    const efectivo = parseFloat(montoInicialEfectivo) || 0;
+    const yape = parseFloat(montoInicialYape) || 0;
+    const montoInicial = efectivo + yape;
+
+    if (montoInicial < 0) {
+      alert("Por favor ingrese montos válidos");
       return;
     }
 
@@ -119,7 +124,9 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
         },
         body: JSON.stringify({
           usuario: currentUser.name,
-          montoInicial: parseFloat(montoInicial),
+          montoInicial,
+          cuenta_efectivo: efectivo,
+          cuenta_yape: yape,
           observaciones,
         }),
       });
@@ -128,9 +135,10 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
 
       // Refetch aperturas después de la apertura
       await fetchAperturas();
-      setMontoInicial("");
+      setMontoInicialEfectivo("");
+      setMontoInicialYape("");
       setObservaciones("");
-      alert(`Caja abierta exitosamente\nMonto inicial: S/ ${parseFloat(montoInicial).toFixed(2)}\nRegistrado en la base de datos`);
+      alert(`Caja abierta exitosamente\nMonto inicial total: S/ ${montoInicial.toFixed(2)}\nEfectivo: S/ ${efectivo.toFixed(2)}\nYape: S/ ${yape.toFixed(2)}\nRegistrado en la base de datos`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -156,21 +164,45 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
           <CardContent className="space-y-4">
             {!cajaAbierta ? (
               <>
-                <div>
-                  <Label>Monto Inicial en Caja *</Label>
-                  <div className="relative mt-2">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                      S/
-                    </span>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={montoInicial}
-                      onChange={(e) => setMontoInicial(e.target.value)}
-                      className="pl-10 text-lg"
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Monto Inicial Efectivo *</Label>
+                    <div className="relative mt-2">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                        S/
+                      </span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={montoInicialEfectivo}
+                        onChange={(e) => setMontoInicialEfectivo(e.target.value)}
+                        className="pl-10 text-lg"
+                      />
+                    </div>
                   </div>
+                  <div>
+                    <Label>Monto Inicial Yape *</Label>
+                    <div className="relative mt-2">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                        S/
+                      </span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={montoInicialYape}
+                        onChange={(e) => setMontoInicialYape(e.target.value)}
+                        className="pl-10 text-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg" style={{ backgroundColor: 'rgba(154, 173, 151, 0.1)' }}>
+                  <p className="text-sm text-muted-foreground">Monto Inicial Total</p>
+                  <p className="text-xl" style={{ color: '#9AAD97', fontWeight: 'bold' }}>
+                    S/ {((parseFloat(montoInicialEfectivo) || 0) + (parseFloat(montoInicialYape) || 0)).toFixed(2)}
+                  </p>
                 </div>
 
                 <div>
@@ -242,7 +274,8 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
                     // se requiere una API adicional que no está implementada aún.
                     alert("Nota: Esta acción solo resetea la vista local. Para cerrar la caja en la base de datos, contacte al administrador.");
                     setCajaAbierta(false);
-                    setMontoInicial("");
+                    setMontoInicialEfectivo("");
+                    setMontoInicialYape("");
                     setObservaciones("");
                     setDatosApertura(null);
                   }}

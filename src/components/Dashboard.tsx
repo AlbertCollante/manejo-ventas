@@ -3,6 +3,8 @@ import { Package, ShoppingCart, Users, TrendingUp, DollarSign, AlertTriangle } f
 import { useState, useEffect } from "react";
 import { dataService } from "../services/dataService";
 
+const API_BASE = 'http://localhost:9000';
+
 interface DashboardProps {
   onNavigate: (module: string) => void;
   currentUser: {
@@ -22,60 +24,93 @@ export function Dashboard({ onNavigate, currentUser }: DashboardProps) {
   const [ventasRecientes, setVentasRecientes] = useState<any[]>([]);
 
   useEffect(() => {
-    // Ventas del día actual
-    const salesHoy = dataService.getSalesToday();
-    const totalVentasHoy = salesHoy.reduce((sum, v) => sum + v.total, 0);
-    setVentasDelDia(totalVentasHoy);
+    const loadDashboardData = async () => {
+      // Ventas del día actual
+      const salesHoy = dataService.getSalesToday();
+      const totalVentasHoy = salesHoy.reduce((sum, v) => sum + v.total, 0);
+      setVentasDelDia(totalVentasHoy);
 
-    // Ventas de ayer para comparativa
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
-    const salesYesterday = dataService.getSalesByDateRange(yesterdayStr, yesterdayStr);
-    const totalVentasYesterday = salesYesterday.reduce((sum, v) => sum + v.total, 0);
-    
-    const percentageChange = totalVentasYesterday > 0 
-      ? ((totalVentasHoy - totalVentasYesterday) / totalVentasYesterday) * 100 
-      : (totalVentasHoy > 0 ? 100 : 0);
-    setVentasDelDiaCompare(percentageChange);
+      // Ventas de ayer para comparativa
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const salesYesterday = dataService.getSalesByDateRange(yesterdayStr, yesterdayStr);
+      const totalVentasYesterday = salesYesterday.reduce((sum, v) => sum + v.total, 0);
+      
+      const percentageChange = totalVentasYesterday > 0 
+        ? ((totalVentasHoy - totalVentasYesterday) / totalVentasYesterday) * 100 
+        : (totalVentasHoy > 0 ? 100 : 0);
+      setVentasDelDiaCompare(percentageChange);
 
-    // Total de productos en stock
-    const productos = dataService.getProducts();
-    const stockTotal = productos.reduce((sum, p) => sum + p.stock, 0);
-    setTotalProductos(stockTotal);
+      // Total de productos en stock
+      const productos = dataService.getProducts();
+      const stockTotal = productos.reduce((sum, p) => sum + p.stock, 0);
+      setTotalProductos(stockTotal);
 
-    // Clientes únicos registrados
-    const allSales = dataService.getSales();
-    const uniqueCustomers = new Set(allSales.map(s => s.customer));
-    setClientesRegistrados(uniqueCustomers.size);
+      // Clientes únicos registrados
+      const allSales = dataService.getSales();
+      const uniqueCustomers = new Set(allSales.map(s => s.customer));
+      setClientesRegistrados(uniqueCustomers.size);
 
-    // Ganancias mensuales - promedio de últimos cierres de caja
-    const cierres = dataService.getCashClosures();
-    const thisMonth = new Date().getMonth();
-    const thisYear = new Date().getFullYear();
-    const cierresMes = cierres.filter(c => {
-      const closureDate = new Date(c.fecha);
-      return closureDate.getMonth() === thisMonth && closureDate.getFullYear() === thisYear;
-    });
-    const gananciasTotal = cierresMes.reduce((sum, c) => sum + c.totalVentas, 0);
-    setGananciasPromedioMensual(gananciasTotal);
+      // Ganancias mensuales - promedio de últimos cierres de caja
+      const cierres = dataService.getCashClosures();
+      const thisMonth = new Date().getMonth();
+      const thisYear = new Date().getFullYear();
+      const cierresMes = cierres.filter(c => {
+        const closureDate = new Date(c.fecha);
+        return closureDate.getMonth() === thisMonth && closureDate.getFullYear() === thisYear;
+      });
+      const gananciasTotal = cierresMes.reduce((sum, c) => sum + c.totalVentas, 0);
+      setGananciasPromedioMensual(gananciasTotal);
 
-    // Productos con stock bajo
-    const lowStock = productos
-      .filter(p => p.stock < p.minStock)
-      .sort((a, b) => a.stock - b.stock);
-    setProductosStockBajo(lowStock);
+      // Productos con stock bajo
+      const lowStock = productos
+        .filter(p => p.stock < p.minStock)
+        .sort((a, b) => a.stock - b.stock);
+      setProductosStockBajo(lowStock);
 
-    // Ventas recientes (últimas 5) con filtro por rol
-    let recentSales = allSales
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5);
+      // Ventas recientes de la caja abierta
+      try {
+        const [aperturasResp, ventasResp] = await Promise.all([
+          fetch(`${API_BASE}/aperturas`),
+          fetch(`${API_BASE}/ventas`)
+        ]);
 
-    if (currentUser && currentUser.role && currentUser.role.toLowerCase() === 'vendedor') {
-      recentSales = recentSales.filter(s => s.user === currentUser.name);
-    }
+        const aperturas = aperturasResp.ok ? await aperturasResp.json() : [];
+        const ventasData = ventasResp.ok ? await ventasResp.json() : [];
 
-    setVentasRecientes(recentSales);
+        const openApertura = Array.isArray(aperturas)
+          ? aperturas.find((a: any) => a.estado === 'abierto')
+          : null;
+
+        const openBoxId = openApertura ? Number(openApertura.id) : null;
+
+        const normalizedSales = (Array.isArray(ventasData) ? ventasData : []).map((sale: any) => ({
+          id: sale.id ?? sale.idventa ?? `V-${sale.id}`,
+          customer: sale.cliente ?? sale.customer ?? 'Cliente General',
+          total: Number(sale.total ?? 0),
+          date: sale.fecha ?? sale.date ?? new Date().toISOString(),
+          user: sale.usuario ?? sale.user ?? '',
+          id_apertura: sale.id_apertura ?? sale.idapertura ?? null,
+        }));
+
+        let recentSales = normalizedSales
+          .filter((s: any) => !openBoxId || s.id_apertura === openBoxId)
+          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 5);
+
+        if (currentUser && currentUser.role && currentUser.role.toLowerCase() === 'vendedor') {
+          recentSales = recentSales.filter((s: any) => s.user === currentUser.name);
+        }
+
+        setVentasRecientes(recentSales);
+      } catch (err) {
+        console.error('Error cargando ventas recientes:', err);
+        setVentasRecientes([]);
+      }
+    };
+
+    loadDashboardData();
   }, []);
 
   const stats = [
@@ -206,7 +241,7 @@ export function Dashboard({ onNavigate, currentUser }: DashboardProps) {
                   </div>
                 ))
               ) : (
-                <p className="text-muted-foreground text-center py-4">No hay ventas registradas hoy</p>
+                <p className="text-muted-foreground text-center py-4">No hay ventas en la caja abierta</p>
               )}
             </div>
           </CardContent>

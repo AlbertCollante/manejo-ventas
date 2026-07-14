@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Search, Plus, Edit, AlertTriangle, Package, Download, Filter, Lock } from "lucide-react";
+import { Search, Plus, Edit, AlertTriangle, Package, Download, Filter, Lock, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -188,11 +188,13 @@ export function InventarioModule() {
     vencimiento: "",
     precio_caja: 0,
     costo_compra: 0,
-    precio_unitario: 0
+    precio_unitario: 0,
+    precio_blister: 0
   });
 
   const [addProductLoading, setAddProductLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -286,8 +288,6 @@ export function InventarioModule() {
       !newProduct.nombre ||
       newProduct.stock_actual === undefined ||
       newProduct.stock_minimo === undefined ||
-      !newProduct.vencimiento ||
-      newProduct.precio_caja === undefined ||
       newProduct.costo_compra === undefined ||
       newProduct.precio_unitario === undefined
     ) {
@@ -298,25 +298,27 @@ export function InventarioModule() {
     setAddProductLoading(true);
 
     try {
-      // Calcular los campos automáticos
-      const ganancia = newProduct.precio_unitario * newProduct.stock_actual;
-      const compra = newProduct.costo_compra;
-
-      const payload = {
+      const payload: any = {
         marca: newProduct.marca,
         nombre: newProduct.nombre,
-        categoria: newProduct.categoria || null,
-        estante: newProduct.estante || null,
-        stock_actual: newProduct.stock_actual,
-        stock_inicial: newProduct.stock_inicial > 0 ? newProduct.stock_inicial : newProduct.stock_actual,
-        stock_minimo: newProduct.stock_minimo,
+        categoria: newProduct.categoria,
+        estante: newProduct.estante,
         vencimiento: newProduct.vencimiento,
-        precio_caja: newProduct.precio_caja,
+        stock_actual: newProduct.stock_actual,
+        stock_minimo: newProduct.stock_minimo,
         costo_compra: newProduct.costo_compra,
         precio_unitario: newProduct.precio_unitario,
-        ganancia,
-        compra
       };
+
+      if (newProduct.stock_inicial > 0) {
+        payload.stock_inicial = newProduct.stock_inicial;
+      }
+      if (newProduct.precio_caja > 0) {
+        payload.precio_caja = newProduct.precio_caja;
+      }
+      if (newProduct.precio_blister > 0) {
+        payload.precio_blister = newProduct.precio_blister;
+      }
 
       const response = await fetch(`${API_BASE}/agregar-producto`, {
         method: 'POST',
@@ -359,7 +361,8 @@ export function InventarioModule() {
         vencimiento: "",
         precio_caja: 0,
         costo_compra: 0,
-        precio_unitario: 0
+        precio_unitario: 0,
+        precio_blister: 0
       });
 
     } catch (error) {
@@ -420,6 +423,40 @@ export function InventarioModule() {
       alert(`Error: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     } finally {
       setSaveLoading(false);
+    }
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!editingProduct) return;
+
+    const confirmed = window.confirm(
+      `¿Estás seguro de eliminar el producto "${editingProduct.name}"? Esta acción no se puede deshacer.`
+    );
+    if (!confirmed) return;
+
+    setDeleteLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/eliminar-producto/${editingProduct.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Error al eliminar el producto');
+      }
+
+      setProducts((prev) => prev.filter((p) => p.id !== editingProduct.id));
+      localStorage.setItem('botica_products', JSON.stringify(products.filter((p) => p.id !== editingProduct.id)));
+
+      setEditingProduct(null);
+      setEditDialogOpen(false);
+      alert('Producto eliminado exitosamente');
+    } catch (error) {
+      alert(`Error: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -662,6 +699,8 @@ export function InventarioModule() {
                         if (date) {
                           const [year, month] = date.split('-');
                           setNewProduct({...newProduct, vencimiento: `${month}/${year}`});
+                        } else {
+                          setNewProduct({...newProduct, vencimiento: ''});
                         }
                       }}
                     />
@@ -684,7 +723,7 @@ export function InventarioModule() {
                       </div>
                     </div>
                     <div>
-                      <Label style={{ color: '#D5B888' }}>Costo x Caja *</Label>
+                      <Label style={{ color: '#D5B888' }}>Costo x Caja</Label>
                       <div className="relative mt-2">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                         <Input 
@@ -718,15 +757,15 @@ export function InventarioModule() {
                       </div>
                     </div>
                     <div>
-                      <Label style={{ color: '#9AAD97' }}>Precio Blister *</Label>
+                      <Label style={{ color: '#9AAD97' }}>Precio Blister</Label>
                       <div className="relative mt-2">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">S/</span>
                         <Input 
                           type="number" 
                           step="0.01" 
                           placeholder="0.00" 
-                          value={newProduct.precio_unitario}
-                          onChange={(e) => setNewProduct({...newProduct, precio_unitario: parseFloat(e.target.value) || 0})}
+                          value={newProduct.precio_blister}
+                          onChange={(e) => setNewProduct({...newProduct, precio_blister: parseFloat(e.target.value) || 0})}
                           className="pl-10"
                         />
                       </div>
@@ -1053,6 +1092,17 @@ export function InventarioModule() {
                 style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
               >
                 {saveLoading ? 'Guardando...' : 'Guardar Cambios'}
+              </Button>
+
+              <Button 
+                variant="outline"
+                className="w-full"
+                onClick={handleDeleteProduct}
+                disabled={deleteLoading}
+                style={{ color: '#ef4444', borderColor: '#ef4444' }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                {deleteLoading ? 'Eliminando...' : 'Eliminar Producto'}
               </Button>
             </div>
           )}

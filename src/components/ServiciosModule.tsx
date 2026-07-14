@@ -824,15 +824,6 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                     onChange={(e) => setNewServiceData({ ...newServiceData, precio: e.target.value })}
                   />
                 </div>
-                <div>
-                  <Label>Duración (opcional)</Label>
-                  <Input
-                    placeholder="Ej: 30 min"
-                    value={newServiceData.duracion}
-                    onChange={(e) => setNewServiceData({ ...newServiceData, duracion: e.target.value })}
-                  />
-                </div>
-
                 {/* Product Selection for New Service */}
                 <div className="border-t pt-4">
                   <h4 style={{ color: '#9AAD97' }} className="font-semibold mb-2">Productos utilizados en este servicio</h4>
@@ -1317,14 +1308,6 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                   placeholder="Precio de aplicación del servicio"
                   value={editServiceData.precio}
                   onChange={(e) => setEditServiceData({ ...editServiceData, precio: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Duración (opcional)</Label>
-                <Input
-                  placeholder="Ej: 30 min"
-                  value={editServiceData.duracion}
-                  onChange={(e) => setEditServiceData({ ...editServiceData, duracion: e.target.value })}
                 />
               </div>
               <div>
