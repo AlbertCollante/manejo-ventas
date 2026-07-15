@@ -974,8 +974,8 @@ export function InventarioModule() {
                     <td className="px-2 py-2">{product.estante ?? product.shelf}</td>
                     <td className="px-2 py-2">S/ {((product.valor_total ?? product.stock * ((product.costo_compra ?? product.precio_compra ?? product.purchasePrice) || 0)) || 0).toFixed(2)}</td>
                     <td className="px-2 py-2">S/ {(product.ganancia ?? 0).toFixed(2)}</td>
-                    <td className="px-2 py-2">S/ {((product.compra ?? product.purchasePrice) || 0).toFixed(2)}</td>
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2">S/ {((product.costo_compra ?? product.precio_compra ?? product.purchasePrice) || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2">  
                       {isVendedor ? (
                         <Lock className="h-4 w-4 text-muted-foreground" />
                       ) : (
@@ -1037,12 +1037,12 @@ export function InventarioModule() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label style={{ color: '#9AAD97' }}>Stock Actual</Label>
-                  <Input type="number" value={editingProduct.stock} onChange={(e) => setEditingProduct({...editingProduct, stock: parseInt(e.target.value) || 0})} />
-                </div>
-                <div>
                   <Label style={{ color: '#D5B888' }}>Stock Inicial</Label>
                   <Input type="number" value={editingProduct.stockInicial} onChange={(e) => setEditingProduct({...editingProduct, stockInicial: parseInt(e.target.value) || 0})} />
+                </div>
+                <div>
+                  <Label style={{ color: '#9AAD97' }}>Stock Actual</Label>
+                  <Input type="number" value={editingProduct.stock} onChange={(e) => setEditingProduct({...editingProduct, stock: parseInt(e.target.value) || 0})} />
                 </div>
                 <div>
                   <Label style={{ color: '#9AAD97' }}>Stock Mínimo</Label>
