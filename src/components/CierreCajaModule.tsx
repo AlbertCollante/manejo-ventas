@@ -48,17 +48,52 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const [ventasDelDia, setVentasDelDia] = useState<any[]>([]);
   const [serviciosDelDia, setServiciosDelDia] = useState<any[]>([]);
   const [montoInicial, setMontoInicial] = useState<number>(0);
+  const [montoInicialYape, setMontoInicialYape] = useState<number>(0);
   const [cuentaEfectivo, setCuentaEfectivo] = useState<number>(0);
   const [cuentaYape, setCuentaYape] = useState<number>(0);
   const [aperturaDelDia, setAperturaDelDia] = useState<any>(null);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [moveAmount, setMoveAmount] = useState("");
+  const [moveType, setMoveType] = useState<"manual" | "recarga" | "retiro-yape" | "deposito-yape">("manual");
   const [moveFrom, setMoveFrom] = useState<"efectivo" | "yape">("efectivo");
   const [moveTo, setMoveTo] = useState<"efectivo" | "yape">("yape");
   const [moveHasCommission, setMoveHasCommission] = useState(false);
   const [moveCommissionAmount, setMoveCommissionAmount] = useState("");
   const [moveCommissionAccount, setMoveCommissionAccount] = useState<"efectivo" | "yape">("efectivo");
   const [moveObservations, setMoveObservations] = useState("");
+
+  const applyMovePreset = (type: "manual" | "recarga" | "retiro-yape" | "deposito-yape") => {
+    setMoveType(type);
+    setMoveAmount("");
+    setMoveCommissionAmount("");
+
+    if (type === "recarga") {
+      setMoveFrom("yape");
+      setMoveTo("efectivo");
+      setMoveHasCommission(false);
+      setMoveCommissionAccount("efectivo");
+      setMoveObservations("Recarga");
+    } else if (type === "retiro-yape") {
+      setMoveFrom("efectivo");
+      setMoveTo("yape");
+      setMoveHasCommission(true);
+      setMoveCommissionAccount("efectivo");
+      setMoveObservations("Retiro Yape");
+    } else if (type === "deposito-yape") {
+      setMoveFrom("yape");
+      setMoveTo("efectivo");
+      setMoveHasCommission(true);
+      setMoveCommissionAccount("efectivo");
+      setMoveObservations("Depósito a Yape");
+    } else {
+      setMoveFrom("efectivo");
+      setMoveTo("yape");
+      setMoveHasCommission(false);
+      setMoveCommissionAccount("efectivo");
+      setMoveObservations("");
+    }
+  };
+
   const [totalCommissions, setTotalCommissions] = useState(0);
   const [moveLoading, setMoveLoading] = useState(false);
   const [showMovementsDialog, setShowMovementsDialog] = useState(false);
@@ -68,6 +103,13 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const [error, setError] = useState<string | null>(null);
 
   const API_BASE = 'http://localhost:9000';
+
+  const normalizeAccountName = (value: any): 'efectivo' | 'yape' | 'otro' => {
+    const name = String(value ?? '').toLowerCase();
+    if (name.includes('efect')) return 'efectivo';
+    if (name.includes('yape')) return 'yape';
+    return 'otro';
+  };
 
   const toLocalISODate = (date: Date): string => {
     const year = date.getFullYear();
@@ -100,6 +142,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       fechaIso: !isNaN(parsedDate.getTime()) ? toLocalISODate(parsedDate) : '',
       usuario: item.usuario || '',
       montoInicial: Number(item.monto_inicial ?? item.montoInicial ?? 0),
+      montoInicialYape: Number(item.monto_inicial_yape ?? item.montoInicialYape ?? 0),
       totalVentas: total,
       montosContados: {
         efectivo,
@@ -332,6 +375,11 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
 
         setAperturaDelDia({ ...openApertura, fecha });
         setMontoInicial(Number(openApertura.montoInicial ?? 0));
+        setMontoInicialYape(Number(
+          openApertura.montoInicialYape ??
+          openApertura.monto_inicial_yape ??
+          0
+        ));
         setCuentaEfectivo(Number(openApertura.cuenta_efectivo ?? 0));
         setCuentaYape(Number(openApertura.cuenta_yape ?? 0));
 
@@ -342,6 +390,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       } else {
         setAperturaDelDia(null);
         setMontoInicial(0);
+        setMontoInicialYape(0);
         setCuentaEfectivo(0);
         setCuentaYape(0);
         setVentasDelDia([]);
@@ -351,6 +400,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
       setAperturaDelDia(null);
       setMontoInicial(0);
+      setMontoInicialYape(0);
       setCuentaEfectivo(0);
       setCuentaYape(0);
       setVentasDelDia([]);
@@ -363,6 +413,13 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     fetchCashClosures();
     fetchOpenApertura();
   }, []);
+
+  // Cargar movimientos automáticamente cuando hay una apertura abierta
+  useEffect(() => {
+    if (aperturaDelDia) {
+      fetchMovements();
+    }
+  }, [aperturaDelDia?.id]);
 
   // Cálculos basados en ventas y servicios reales
   const totalVentas = ventasDelDia.reduce((sum, v) => sum + v.total, 0);
@@ -395,6 +452,30 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                        parseFloat(montoTarjeta || "0") + 
                        parseFloat(montoTransferencia || "0");
   const diferencia = totalContado - totalEsperado;
+
+  // Resumen de movimientos entre cuentas
+  const resumenMovimientos = movementsList.reduce((acc, mov) => {
+    const origen = normalizeAccountName(mov.cuenta_origen);
+    const destino = normalizeAccountName(mov.cuenta_destino);
+    const monto = Number(mov.monto ?? 0);
+    const comision = Number(mov.comision ?? 0);
+    const cuentaComision = normalizeAccountName(mov.cuenta_comision);
+
+    if (origen === 'efectivo' || origen === 'yape') {
+      acc[origen].movimientos -= monto;
+    }
+    if (destino === 'efectivo' || destino === 'yape') {
+      acc[destino].movimientos += monto;
+    }
+    if (comision > 0 && (cuentaComision === 'efectivo' || cuentaComision === 'yape')) {
+      acc[cuentaComision].comisiones += comision;
+    }
+
+    return acc;
+  }, {
+    efectivo: { movimientos: 0, comisiones: 0 },
+    yape: { movimientos: 0, comisiones: 0 },
+  });
 
   const fetchMovements = async () => {
     if (!aperturaDelDia) return;
@@ -467,19 +548,23 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       });
 
       // Registrar el movimiento en el historial
+      const movimientoPayload: any = {
+        id_apertura: aperturaDelDia.id,
+        cuenta_origen: moveFrom === 'efectivo' ? 'EFECTIVO' : 'YAPE',
+        cuenta_destino: moveTo === 'efectivo' ? 'EFECTIVO' : 'YAPE',
+        monto: amount,
+        comision: commission,
+        usuario: currentUser.name,
+        observaciones: moveObservations.trim() || `Movimiento de ${moveFrom} a ${moveTo}${commission > 0 ? ` con comisión S/ ${commission.toFixed(2)}` : ''}`
+      };
+      if (commission > 0) {
+        movimientoPayload.cuenta_comision = moveCommissionAccount === 'efectivo' ? 'EFECTIVO' : 'YAPE';
+      }
+
       const movimientoResp = await fetch(`${API_BASE}/movimientos-cuenta`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id_apertura: aperturaDelDia.id,
-          cuenta_origen: moveFrom === 'efectivo' ? 'EFECTIVO' : 'YAPE',
-          cuenta_destino: moveTo === 'efectivo' ? 'EFECTIVO' : 'YAPE',
-          monto: amount,
-          comision: commission,
-          cuenta_comision: commission > 0 ? (moveCommissionAccount === 'efectivo' ? 'EFECTIVO' : 'YAPE') : null,
-          usuario: currentUser.name,
-          observaciones: moveObservations.trim() || `Movimiento de ${moveFrom} a ${moveTo}${commission > 0 ? ` con comisión S/ ${commission.toFixed(2)}` : ''}`
-        })
+        body: JSON.stringify(movimientoPayload)
       });
 
       if (!movimientoResp.ok) {
@@ -491,8 +576,9 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
         setTotalCommissions((prev) => prev + commission);
       }
 
-      // Recargar apertura para actualizar saldos
+      // Recargar apertura y movimientos para actualizar saldos y resumen
       await fetchOpenApertura();
+      await fetchMovements();
       setMoveAmount("");
       setMoveHasCommission(false);
       setMoveCommissionAmount("");
@@ -663,7 +749,9 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       [],
       ['RESUMEN FINANCIERO'],
       ['Concepto', 'Monto (S/)'],
-      ['Monto Inicial', montoInicial.toFixed(2)],
+      ['Total Inicial', (montoInicial + montoInicialYape).toFixed(2)],
+      ['Monto Inicial Efectivo', montoInicial.toFixed(2)],
+      ['Monto Inicial Yape', montoInicialYape.toFixed(2)],
       ['Total Ventas', totalVentas.toFixed(2)],
       ['Total Servicios', totalServicios.toFixed(2)],
       ['Total Ingresos', totalIngresos.toFixed(2)],
@@ -946,8 +1034,12 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                     <DollarSign className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Monto Inicial</p>
-                    <p className="text-xl">S/ {montoInicial.toFixed(2)}</p>
+                    <p className="text-sm text-muted-foreground">Total Inicial</p>
+                    <p className="text-xl">S/ {(montoInicial + montoInicialYape).toFixed(2)}</p>
+                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                      <span>Efectivo: S/ {montoInicial.toFixed(2)}</span>
+                      <span>Yape: S/ {montoInicialYape.toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -1005,13 +1097,41 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 border-l-4 border-green-500 bg-green-50 rounded-lg">
-                    <span>Cuenta Efectivo</span>
-                    <span style={{ fontWeight: 'bold' }}>S/ {cuentaEfectivo.toFixed(2)}</span>
+                  <div className="p-3 border-l-4 border-green-500 bg-green-50 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span>Cuenta Efectivo</span>
+                      <span style={{ fontWeight: 'bold' }}>S/ {cuentaEfectivo.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs mt-1">
+                      <span className="text-muted-foreground">Movimientos</span>
+                      <span className={resumenMovimientos.efectivo.movimientos >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        {resumenMovimientos.efectivo.movimientos >= 0 ? '+' : ''}S/ {resumenMovimientos.efectivo.movimientos.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Comisiones</span>
+                      <span className={resumenMovimientos.efectivo.comisiones >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        {resumenMovimientos.efectivo.comisiones >= 0 ? '+' : ''}S/ {resumenMovimientos.efectivo.comisiones.toFixed(2)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between p-3 border-l-4 border-purple-500 bg-purple-50 rounded-lg">
-                    <span>Cuenta Yape</span>
-                    <span style={{ fontWeight: 'bold' }}>S/ {cuentaYape.toFixed(2)}</span>
+                  <div className="p-3 border-l-4 border-purple-500 bg-purple-50 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span>Cuenta Yape</span>
+                      <span style={{ fontWeight: 'bold' }}>S/ {cuentaYape.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs mt-1">
+                      <span className="text-muted-foreground">Movimientos</span>
+                      <span className={resumenMovimientos.yape.movimientos >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        {resumenMovimientos.yape.movimientos >= 0 ? '+' : ''}S/ {resumenMovimientos.yape.movimientos.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Comisiones</span>
+                      <span className={resumenMovimientos.yape.comisiones >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        {resumenMovimientos.yape.comisiones >= 0 ? '+' : ''}S/ {resumenMovimientos.yape.comisiones.toFixed(2)}
+                      </span>
+                    </div>
                   </div>
                   <div className="pt-2 border-t">
                     <p className="text-xs text-muted-foreground mb-2">Ventas por método de pago (solo referencia)</p>
@@ -1025,7 +1145,10 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       variant="outline"
-                      onClick={() => setShowMoveDialog(true)}
+                      onClick={() => {
+                        applyMovePreset('manual');
+                        setShowMoveDialog(true);
+                      }}
                       disabled={!aperturaDelDia}
                     >
                       Movimientos de cuentas
@@ -1185,26 +1308,16 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
               </div>
 
               <p className="text-sm font-medium mb-3" style={{ color: '#9AAD97' }}>Por Método de Pago</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #9AAD97' }}>
                   <p className="text-xs text-muted-foreground">Efectivo</p>
                   <p className="text-base font-semibold" style={{ color: '#9AAD97' }}>S/ {ventasDelDia.filter(v => v.paymentMethod === "Efectivo").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Efectivo").length} ventas</p>
                 </div>
                 <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #D5B888' }}>
-                  <p className="text-xs text-muted-foreground">Yape</p>
-                  <p className="text-base font-semibold" style={{ color: '#D5B888' }}>S/ {ventasDelDia.filter(v => v.paymentMethod === "Yape").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Yape").length} ventas</p>
-                </div>
-                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #9AAD97' }}>
-                  <p className="text-xs text-muted-foreground">Tarjeta</p>
-                  <p className="text-base font-semibold" style={{ color: '#9AAD97' }}>S/ {ventasDelDia.filter(v => v.paymentMethod === "Tarjeta").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Tarjeta").length} ventas</p>
-                </div>
-                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #D5B888' }}>
-                  <p className="text-xs text-muted-foreground">Transferencia</p>
-                  <p className="text-base font-semibold" style={{ color: '#D5B888' }}>S/ {ventasDelDia.filter(v => v.paymentMethod === "Transferencia").reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => v.paymentMethod === "Transferencia").length} ventas</p>
+                  <p className="text-xs text-muted-foreground">Yape / Tarjeta / Transferencia</p>
+                  <p className="text-base font-semibold" style={{ color: '#D5B888' }}>S/ {ventasDelDia.filter(v => ["Yape", "Tarjeta", "Transferencia"].includes(v.paymentMethod)).reduce((sum, v) => sum + v.total, 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{ventasDelDia.filter(v => ["Yape", "Tarjeta", "Transferencia"].includes(v.paymentMethod)).length} ventas</p>
                 </div>
               </div>
             </CardContent>
@@ -1233,26 +1346,16 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
               </div>
 
               <p className="text-sm font-medium mb-3" style={{ color: '#9AAD97' }}>Por Método de Pago</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #9AAD97' }}>
                   <p className="text-xs text-muted-foreground">Efectivo</p>
                   <p className="text-base font-semibold" style={{ color: '#9AAD97' }}>S/ {serviciosDelDia.filter(s => s.paymentMethod === "Efectivo").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Efectivo").length} servicios</p>
                 </div>
                 <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #D5B888' }}>
-                  <p className="text-xs text-muted-foreground">Yape</p>
-                  <p className="text-base font-semibold" style={{ color: '#D5B888' }}>S/ {serviciosDelDia.filter(s => s.paymentMethod === "Yape").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Yape").length} servicios</p>
-                </div>
-                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #9AAD97' }}>
-                  <p className="text-xs text-muted-foreground">Tarjeta</p>
-                  <p className="text-base font-semibold" style={{ color: '#9AAD97' }}>S/ {serviciosDelDia.filter(s => s.paymentMethod === "Tarjeta").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Tarjeta").length} servicios</p>
-                </div>
-                <div className="p-3 rounded-sm border" style={{ borderColor: '#e5e7eb', borderLeft: '2px solid #D5B888' }}>
-                  <p className="text-xs text-muted-foreground">Transferencia</p>
-                  <p className="text-base font-semibold" style={{ color: '#D5B888' }}>S/ {serviciosDelDia.filter(s => s.paymentMethod === "Transferencia").reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => s.paymentMethod === "Transferencia").length} servicios</p>
+                  <p className="text-xs text-muted-foreground">Yape / Tarjeta / Transferencia</p>
+                  <p className="text-base font-semibold" style={{ color: '#D5B888' }}>S/ {serviciosDelDia.filter(s => ["Yape", "Tarjeta", "Transferencia"].includes(s.paymentMethod)).reduce((sum, s) => sum + s.subtotal, 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{serviciosDelDia.filter(s => ["Yape", "Tarjeta", "Transferencia"].includes(s.paymentMethod)).length} servicios</p>
                 </div>
               </div>
             </CardContent>
@@ -1292,7 +1395,8 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nro Caja</TableHead>
-                      <TableHead>Monto Inicial</TableHead>
+                      <TableHead>Monto Inicial Efectivo</TableHead>
+                      <TableHead>Monto Inicial Yape</TableHead>
                       <TableHead>Fecha y Hora</TableHead>
                       <TableHead>Usuario</TableHead>
                       <TableHead>Efectivo</TableHead>
@@ -1310,6 +1414,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                         <TableRow key={cierre.id}>
                           <TableCell className="font-bold" style={{ color: '#9AAD97' }}>{cierre.aperturaId}</TableCell>
                           <TableCell className="text-sm">S/ {cierre.montoInicial.toFixed(2)}</TableCell>
+                          <TableCell className="text-sm">S/ {Number(cierre.montoInicialYape ?? 0).toFixed(2)}</TableCell>
                           <TableCell className="text-sm">{cierre.fecha}</TableCell>
                           <TableCell>{cierre.usuario}</TableCell>
                           <TableCell>S/ {cierre.montosContados.efectivo.toFixed(2)}</TableCell>
@@ -1327,7 +1432,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center py-4 text-muted-foreground">
+                        <TableCell colSpan={12} className="text-center py-4 text-muted-foreground">
                           No hay cierres registrados
                         </TableCell>
                       </TableRow>
@@ -1643,6 +1748,20 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
+            <div>
+              <Label>Tipo de Movimiento</Label>
+              <Select value={moveType} onValueChange={(value: "manual" | "recarga" | "retiro-yape" | "deposito-yape") => applyMovePreset(value)}>
+                <SelectTrigger className="w-full mt-2">
+                  <SelectValue placeholder="Seleccione tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="recarga">Recarga</SelectItem>
+                  <SelectItem value="retiro-yape">Retiro Yape</SelectItem>
+                  <SelectItem value="deposito-yape">Depósito a Yape</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Cuenta Origen</Label>

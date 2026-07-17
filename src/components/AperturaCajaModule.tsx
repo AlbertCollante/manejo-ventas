@@ -20,6 +20,8 @@ interface Apertura {
   fecha: string;
   usuario: string;
   montoInicial: string;
+  montoInicialYape?: string;
+  monto_inicial_yape?: string;
   observaciones: string;
   estado: string;
   cuenta_efectivo?: number;
@@ -92,9 +94,9 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
   const handleAperturaCaja = async () => {
     const efectivo = parseFloat(montoInicialEfectivo) || 0;
     const yape = parseFloat(montoInicialYape) || 0;
-    const montoInicial = efectivo + yape;
+    const montoInicialTotal = efectivo + yape;
 
-    if (montoInicial < 0) {
+    if (montoInicialTotal < 0) {
       alert("Por favor ingrese montos válidos");
       return;
     }
@@ -124,7 +126,8 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
         },
         body: JSON.stringify({
           usuario: currentUser.name,
-          montoInicial,
+          montoInicial: efectivo,
+          montoInicialYape: yape,
           cuenta_efectivo: efectivo,
           cuenta_yape: yape,
           observaciones,
@@ -138,7 +141,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
       setMontoInicialEfectivo("");
       setMontoInicialYape("");
       setObservaciones("");
-      alert(`Caja abierta exitosamente\nMonto inicial total: S/ ${montoInicial.toFixed(2)}\nEfectivo: S/ ${efectivo.toFixed(2)}\nYape: S/ ${yape.toFixed(2)}\nRegistrado en la base de datos`);
+      alert(`Caja abierta exitosamente\nMonto inicial total: S/ ${montoInicialTotal.toFixed(2)}\nEfectivo: S/ ${efectivo.toFixed(2)}\nYape: S/ ${yape.toFixed(2)}\nRegistrado en la base de datos`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -237,8 +240,12 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
                     </div>
                     <div className="space-y-2">
                       <p className="text-sm">
-                        <span className="text-muted-foreground">Monto Inicial:</span>
+                        <span className="text-muted-foreground">Monto Inicial Efectivo:</span>
                         <span className="ml-2 text-lg">S/ {parseFloat(datosApertura.montoInicial).toFixed(2)}</span>
+                      </p>
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Monto Inicial Yape:</span>
+                        <span className="ml-2 text-lg" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {Number(datosApertura.montoInicialYape ?? datosApertura.monto_inicial_yape ?? 0).toFixed(2)}</span>
                       </p>
                       <p className="text-sm">
                         <span className="text-muted-foreground">Cuenta Efectivo:</span>
@@ -303,7 +310,8 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
                       <th className="px-4 py-2 text-left font-medium">Nro Caja</th>
                       <th className="px-4 py-2 text-left font-medium">Fecha y Hora</th>
                       <th className="px-4 py-2 text-left font-medium">Usuario</th>
-                      <th className="px-4 py-2 text-left font-medium">Monto Inicial</th>
+                      <th className="px-4 py-2 text-left font-medium">Monto Inicial Efectivo</th>
+                      <th className="px-4 py-2 text-left font-medium">Monto Inicial Yape</th>
                       <th className="px-4 py-2 text-left font-medium">Estado</th>
                       <th className="px-4 py-2 text-left font-medium">Observaciones</th>
                     </tr>
@@ -315,6 +323,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
                         <td className="px-4 py-2">{apertura.fecha}</td>
                         <td className="px-4 py-2">{apertura.usuario}</td>
                         <td className="px-4 py-2">S/ {parseFloat(apertura.montoInicial).toFixed(2)}</td>
+                        <td className="px-4 py-2">S/ {Number(apertura.montoInicialYape ?? apertura.monto_inicial_yape ?? 0).toFixed(2)}</td>
                         <td className="px-4 py-2">
                           <span style={{
                             padding: '0.25rem 0.75rem',

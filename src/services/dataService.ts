@@ -53,6 +53,7 @@ export interface CierreCaja {
   fechaIso?: string;
   usuario: string;
   montoInicial: number;
+  montoInicialYape?: number;
   totalVentas: number;
   montosContados: {
     efectivo: number;
@@ -72,6 +73,7 @@ export interface AperturaCaja {
   fecha: string;
   usuario: string;
   montoInicial: number;
+  montoInicialYape?: number;
   observaciones: string;
   estado: 'abierto' | 'cerrado';
 }

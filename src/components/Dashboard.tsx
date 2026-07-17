@@ -130,27 +130,7 @@ export function Dashboard({ onNavigate, currentUser }: DashboardProps) {
       color: "text-green-600",
       bgColor: "bg-green-100",
     },
-    {
-      title: "Clientes Registrados",
-      change: `${Math.max(0, clientesRegistrados - 5)} nuevos esta semana`,
-      value: clientesRegistrados.toString(),
-      icon: Users,
-      color: "text-purple-600",
-      bgColor: "bg-purple-100",
-    },
-    {
-      title: "Ganancias Mensuales",
-      value: `S/ ${gananciasPromedioMensual.toFixed(2)}`,
-      change: `${Math.ceil(gananciasPromedioMensual / Math.max(1, dataService.getCashClosures().filter(c => {
-        const closureDate = new Date(c.fecha);
-        const thisMonth = new Date().getMonth();
-        const thisYear = new Date().getFullYear();
-        return closureDate.getMonth() === thisMonth && closureDate.getFullYear() === thisYear;
-      }).length))} promedio por cierre`,
-      icon: TrendingUp,
-      color: "text-orange-600",
-      bgColor: "bg-orange-100",
-    },
+    
   ];
 
   return (
@@ -160,7 +140,7 @@ export function Dashboard({ onNavigate, currentUser }: DashboardProps) {
         <p className="text-muted-foreground">Resumen general del sistema</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           const isGreen = index % 2 === 0;
