@@ -954,9 +954,9 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
         const saleLocal = { id, date: new Date().toLocaleString('es-PE'), dateOnly: new Date().toISOString().split('T')[0], customer: saleInfo.cliente, dni: saleInfo.dni, items: cart, subtotal, discount, total, paymentAmount: finalPaymentAmount, vuelto, paymentMethod: saleInfo.metodo, user: currentUser.name };
         setSales(prev => [...prev, saleLocal]);
         dataService.addSale(saleLocal);
+        resetSaleFields();
         setLastSaleData(saleLocal);
         setShowVoucherDialog(true);
-        alert('Venta registrada localmente (backend no disponible)');
         return;
       }
 
@@ -1017,8 +1017,9 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
         saleToShow = { ...saleInfo, id: idventa, items: cart };
       }
 
-      finalizeSale();
-      alert('Venta registrada correctamente');
+      resetSaleFields();
+      setLastSaleData(saleToShow);
+      setShowVoucherDialog(true);
     } catch (error) {
       console.error('completeSale error:', error);
       alert('Error al procesar la venta');
@@ -1027,7 +1028,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     }
   };
 
-  const finalizeSale = () => {
+  const resetSaleFields = () => {
     setCart([]);
     setCustomerName("");
     setCustomerDni("");
@@ -1035,6 +1036,10 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     setCouponCode("");
     setPaymentMethod("efectivo");
     setPaymentAmount("");
+  };
+
+  const finalizeSale = () => {
+    resetSaleFields();
     setShowVoucherDialog(false);
   };
 
