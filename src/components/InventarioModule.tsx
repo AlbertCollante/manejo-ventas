@@ -1085,25 +1085,30 @@ export function InventarioModule() {
                 </div>
               </div>
               
-              <Button 
-                className="w-full" 
-                onClick={handleUpdateProduct}
-                disabled={saveLoading}
-                style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
-              >
-                {saveLoading ? 'Guardando...' : 'Guardar Cambios'}
-              </Button>
-
-              <Button 
-                variant="outline"
-                className="w-full"
-                onClick={handleDeleteProduct}
-                disabled={deleteLoading}
-                style={{ color: '#ef4444', borderColor: '#ef4444' }}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                {deleteLoading ? 'Eliminando...' : 'Eliminar Producto'}
-              </Button>
+              <div className="flex items-center gap-2 pt-2">
+                <Button 
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleDeleteProduct}
+                  disabled={deleteLoading}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2"
+                  title="Eliminar producto"
+                >
+                  {deleteLoading ? (
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-red-300 border-t-red-600" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button 
+                  className="flex-1" 
+                  onClick={handleUpdateProduct}
+                  disabled={saveLoading}
+                  style={{ backgroundColor: '#9AAD97', color: 'white', border: 'none' }}
+                >
+                  {saveLoading ? 'Guardando...' : 'Guardar Cambios'}
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
