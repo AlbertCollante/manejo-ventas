@@ -38,6 +38,33 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const API_BASE = 'http://localhost:9000';
+  const CUENTA_EFECTIVO_GENERAL_ID = 10;
+  const CUENTA_YAPE_GENERAL_ID = 11;
+
+  const registrarMovimientoContable = async (payload: {
+    id_cuenta: number;
+    id_apertura?: number | null;
+    monto: number;
+    tipo: 'INGRESO' | 'EGRESO';
+    concepto: string;
+    usuario: string;
+  }) => {
+    const response = await fetch(`${API_BASE}/movimientos-contables`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('Error registrando movimiento contable:', text);
+      throw new Error(text || 'Error registrando movimiento contable');
+    }
+
+    return response.json();
+  };
+
   // Función para obtener aperturas desde la API
   const fetchAperturas = async () => {
     try {
@@ -119,7 +146,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
         }
       }
 
-      const response = await fetch('http://localhost:9000/apertura-turno', {
+      const response = await fetch(`${API_BASE}/apertura-turno`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -136,8 +163,44 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
 
       if (!response.ok) throw new Error('Error al aperturar la caja');
 
+      const aperturaCreada = await response.json();
+      const idApertura = aperturaCreada?.id ?? aperturaCreada?.id_apertura ?? null;
+      console.log('Apertura creada:', aperturaCreada, 'ID capturado:', idApertura);
+
       // Refetch aperturas después de la apertura
       await fetchAperturas();
+
+      // Registrar movimientos contables: salida de dinero de las cuentas generales
+      const movimientosApertura = [
+        {
+          id_cuenta: CUENTA_EFECTIVO_GENERAL_ID,
+          id_apertura: idApertura,
+          monto: efectivo,
+          tipo: 'EGRESO' as const,
+          concepto: 'apertura de caja',
+          usuario: currentUser.name,
+        },
+        {
+          id_cuenta: CUENTA_YAPE_GENERAL_ID,
+          id_apertura: idApertura,
+          monto: yape,
+          tipo: 'EGRESO' as const,
+          concepto: 'apertura de caja',
+          usuario: currentUser.name,
+        },
+      ].filter(m => m.monto > 0);
+
+      console.log('Movimientos contables de apertura a enviar:', movimientosApertura);
+
+      if (movimientosApertura.length > 0) {
+        try {
+          const resultados = await Promise.all(movimientosApertura.map(registrarMovimientoContable));
+          console.log('Movimientos contables de apertura registrados:', resultados);
+        } catch (movimientoError) {
+          console.error('Error registrando movimientos contables de apertura:', movimientoError);
+          alert(`Advertencia: La caja se aperturó correctamente, pero no se pudieron registrar los movimientos contables asociados.\n\nError: ${movimientoError instanceof Error ? movimientoError.message : 'Error desconocido'}`);
+        }
+      }
       setMontoInicialEfectivo("");
       setMontoInicialYape("");
       setObservaciones("");

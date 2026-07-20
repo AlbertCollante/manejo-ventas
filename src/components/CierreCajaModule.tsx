@@ -103,6 +103,31 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const [error, setError] = useState<string | null>(null);
 
   const API_BASE = 'http://localhost:9000';
+  const CUENTA_EFECTIVO_GENERAL_ID = 10;
+  const CUENTA_YAPE_GENERAL_ID = 11;
+
+  const registrarMovimientoContable = async (payload: {
+    id_cuenta: number;
+    id_apertura?: number | null;
+    monto: number;
+    tipo: 'INGRESO' | 'EGRESO';
+    concepto: string;
+    usuario: string;
+  }) => {
+    const response = await fetch(`${API_BASE}/movimientos-contables`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('Error registrando movimiento contable:', text);
+      throw new Error(text || 'Error registrando movimiento contable');
+    }
+
+    return response.json();
+  };
 
   const normalizeAccountName = (value: any): 'efectivo' | 'yape' | 'otro' => {
     const name = String(value ?? '').toLowerCase();
@@ -644,8 +669,43 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
         throw new Error(text || 'Error al cerrar la apertura de caja');
       }
 
+      // Capturar saldos actuales antes de que la recarga de apertura los resetee
+      const efectivoFinal = cuentaEfectivo;
+      const yapeFinal = cuentaYape;
+      const aperturaId = aperturaDelDia.id;
+
       await fetchCashClosures();
       await fetchOpenApertura();
+
+      // Registrar movimientos contables de cierre: retorno del dinero a las cuentas generales
+      const movimientosCierre = [
+        {
+          id_cuenta: CUENTA_EFECTIVO_GENERAL_ID,
+          id_apertura: aperturaId,
+          monto: efectivoFinal,
+          tipo: 'INGRESO' as const,
+          concepto: 'cierre de caja',
+          usuario: currentUser.name,
+        },
+        {
+          id_cuenta: CUENTA_YAPE_GENERAL_ID,
+          id_apertura: aperturaId,
+          monto: yapeFinal,
+          tipo: 'INGRESO' as const,
+          concepto: 'cierre de caja',
+          usuario: currentUser.name,
+        },
+      ].filter(m => m.monto > 0);
+
+      if (movimientosCierre.length > 0) {
+        try {
+          await Promise.all(movimientosCierre.map(registrarMovimientoContable));
+          console.log('Movimientos contables de cierre registrados:', movimientosCierre);
+        } catch (movimientoError) {
+          console.error('Error registrando movimientos contables de cierre:', movimientoError);
+          alert('Advertencia: El cierre se registró correctamente, pero no se pudieron registrar los movimientos contables asociados.');
+        }
+      }
 
       // Calcular comisiones totales desde los movimientos registrados (más confiable que el estado local)
       let commissionsToRegister = totalCommissions;

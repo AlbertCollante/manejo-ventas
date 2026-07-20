@@ -15,7 +15,7 @@ interface CuentaContable {
   id_cuenta: number;
   codigo: string;
   nombre: string;
-  tipo: 'INGRESO' | 'EGRESO';
+  tipo: 'INGRESO' | 'EGRESO' | 'ACTIVO';
   saldo: number;
   es_totalizadora: number;
   cuenta_padre_id: number | null;
@@ -26,6 +26,8 @@ interface MovimientoContable {
   id_movimiento?: number;
   id_cuenta: number;
   cuenta?: string;
+  codigo_cuenta?: string;
+  nombre_cuenta?: string;
   monto: number;
   tipo: 'INGRESO' | 'EGRESO';
   concepto: string;
@@ -273,7 +275,9 @@ export function ContabilidadModule({ currentUser }: ContabilidadModuleProps) {
                       <TableCell>{cuenta.nombre}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          cuenta.tipo === 'INGRESO' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          cuenta.tipo === 'INGRESO' ? 'bg-green-100 text-green-700' : 
+                          cuenta.tipo === 'EGRESO' ? 'bg-red-100 text-red-700' : 
+                          'bg-blue-100 text-blue-700'
                         }`}>
                           {cuenta.tipo}
                         </span>
@@ -319,7 +323,16 @@ export function ContabilidadModule({ currentUser }: ContabilidadModuleProps) {
                   movimientos.map((mov, idx) => (
                     <TableRow key={mov.id_movimiento ?? idx}>
                       <TableCell className="whitespace-nowrap">{formatFecha(mov.fecha_hora)}</TableCell>
-                      <TableCell>{mov.cuenta || '-'}</TableCell>
+                      <TableCell>
+                        {mov.codigo_cuenta || mov.nombre_cuenta ? (
+                          <div>
+                            <span className="font-medium">{mov.codigo_cuenta || '-'}</span>
+                            {mov.nombre_cuenta && <span className="text-muted-foreground ml-1">- {mov.nombre_cuenta}</span>}
+                          </div>
+                        ) : (
+                          mov.cuenta || '-'
+                        )}
+                      </TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
                           mov.tipo === 'INGRESO' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'

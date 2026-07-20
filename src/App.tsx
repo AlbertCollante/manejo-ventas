@@ -84,7 +84,7 @@ export default function App() {
       case "contabilidad":
         return currentUser ? <ContabilidadModule currentUser={currentUser} /> : null;
       case "usuarios":
-        return <UsuariosModule />;
+        return currentUser ? <UsuariosModule currentUser={currentUser} /> : null;
       case "proveedores":
         return currentUser ? <ProveedoresModule currentUser={currentUser} /> : null;
       case "apertura_caja":
