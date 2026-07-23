@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
-const API_BASE = 'http://localhost:9000';
+const API_BASE = 'https://node-js-consalud-production.up.railway.app';
 
 const normalizeApiProduct = (product: any) => {
   const stock = Number(product.stock_actual ?? product.stock ?? 0);

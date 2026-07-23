@@ -102,7 +102,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const API_BASE = 'http://localhost:9000';
+  const API_BASE = 'https://node-js-consalud-production.up.railway.app';
   const CUENTA_EFECTIVO_GENERAL_ID = 10;
   const CUENTA_YAPE_GENERAL_ID = 11;
 

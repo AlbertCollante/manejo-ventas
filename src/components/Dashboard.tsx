@@ -3,7 +3,7 @@ import { Package, ShoppingCart, Users, TrendingUp, DollarSign, AlertTriangle } f
 import { useState, useEffect } from "react";
 import { dataService } from "../services/dataService";
 
-const API_BASE = 'http://localhost:9000';
+const API_BASE = 'https://node-js-consalud-production.up.railway.app';
 
 interface DashboardProps {
   onNavigate: (module: string) => void;

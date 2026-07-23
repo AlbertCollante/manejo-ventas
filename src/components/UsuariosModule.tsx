@@ -33,7 +33,7 @@ interface UserForm {
   contrasena: string;
 }
 
-const API_BASE = 'http://localhost:9000';
+const API_BASE = 'https://node-js-consalud-production.up.railway.app';
 const ROLES = ['Administrador', 'Vendedor'];
 
 export function UsuariosModule({ currentUser }: UsuariosModuleProps) {

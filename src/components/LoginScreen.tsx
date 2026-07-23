@@ -33,7 +33,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
     try {
       const response = await fetch(
-        `http://localhost:9000/simple-role?user=${encodeURIComponent(username)}&contrasena=${encodeURIComponent(password)}`
+        `https://node-js-consalud-production.up.railway.app/simple-role?user=${encodeURIComponent(username)}&contrasena=${encodeURIComponent(password)}`
       );
 
       const contentType = response.headers.get("content-type") || "";

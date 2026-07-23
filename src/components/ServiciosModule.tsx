@@ -19,7 +19,7 @@ interface ServiciosModuleProps {
 }
 
 export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
-  const API_BASE = 'http://localhost:9000';
+  const API_BASE = 'https://node-js-consalud-production.up.railway.app';
 
   const updateCashAccount = async (idApertura: number, paymentMethod: string, amount: number) => {
     const metodo = String(paymentMethod).toLowerCase();

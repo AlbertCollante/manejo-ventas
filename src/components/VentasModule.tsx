@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { dataService } from "../services/dataService";
 
-const API_BASE = 'http://localhost:9000';
+const API_BASE = 'https://node-js-consalud-production.up.railway.app';
 
 const updateCashAccount = async (idApertura: number, paymentMethod: string, amount: number) => {
   const metodo = String(paymentMethod).toLowerCase();

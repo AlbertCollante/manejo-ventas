@@ -35,7 +35,7 @@ import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Checkbox } from "./ui/checkbox";
 
-const API_BASE = "http://localhost:9000/api";
+const API_BASE = "https://node-js-consalud-production.up.railway.app/api";
 
 type View = "proveedores" | "pedidos" | "nuevo-pedido" | "detalle-pedido" | "discrepancias";
 

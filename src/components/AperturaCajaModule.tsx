@@ -38,7 +38,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const API_BASE = 'http://localhost:9000';
+  const API_BASE = 'https://node-js-consalud-production.up.railway.app';
   const CUENTA_EFECTIVO_GENERAL_ID = 10;
   const CUENTA_YAPE_GENERAL_ID = 11;
 
@@ -68,7 +68,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
   // Función para obtener aperturas desde la API
   const fetchAperturas = async () => {
     try {
-      const response = await fetch('http://localhost:9000/aperturas');
+      const response = await fetch('https://node-js-consalud-production.up.railway.app/aperturas');
       if (!response.ok) throw new Error('Error al obtener aperturas');
       const data = await response.json();
       
@@ -133,7 +133,7 @@ export function AperturaCajaModule({ currentUser }: AperturaCajaModuleProps) {
 
     try {
       // Verificar si ya existe una caja abierta
-      const aperturaResponse = await fetch('http://localhost:9000/aperturas');
+      const aperturaResponse = await fetch('https://node-js-consalud-production.up.railway.app/aperturas');
       if (aperturaResponse.ok) {
         const aperturas = await aperturaResponse.json();
         const cajaAbiertaExistente = aperturas.find((apertura: any) => apertura.estado === 'abierto');

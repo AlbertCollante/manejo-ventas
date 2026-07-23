@@ -9,7 +9,7 @@ import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
 
-const API_BASE = 'http://localhost:9000';
+const API_BASE = 'https://node-js-consalud-production.up.railway.app';
 
 interface CuentaContable {
   id_cuenta: number;
