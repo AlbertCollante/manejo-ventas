@@ -97,7 +97,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
   const [editServiceData, setEditServiceData] = useState({
     descripcion: "",
     precio: "",
-    duracion: "",
+    duracion: 0,
     estado: "ACT"
   });
   const [editServiceProducts, setEditServiceProducts] = useState<any[]>([]);
@@ -625,7 +625,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
         body: JSON.stringify({
           descripcion: editServiceData.descripcion,
           precio: precioTotal,
-          duracion: editServiceData.duracion || '',
+          duracion: editServiceData.duracion || 0,
           productos: productIds,
           precio_de_aplicacion: precioDeAplicacion,
           estado: editServiceData.estado
