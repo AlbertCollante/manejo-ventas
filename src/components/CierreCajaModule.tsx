@@ -143,7 +143,7 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
     return `${year}-${month}-${day}`;
   };
 
-  const mapApiClosureToCierreCaja = (item: any): CierreCaja => {
+  const mapApiClosureToCierreCaja = (item: any, apertura?: any): CierreCaja => {
     const efectivo = Number(item.efectivo ?? 0);
     const yape = Number(item.yape ?? 0);
     const tarjeta = Number(item.tarjeta ?? 0);
@@ -167,7 +167,13 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
       fechaIso: !isNaN(parsedDate.getTime()) ? toLocalISODate(parsedDate) : '',
       usuario: item.usuario || '',
       montoInicial: Number(item.monto_inicial ?? item.montoInicial ?? 0),
-      montoInicialYape: Number(item.monto_inicial_yape ?? item.montoInicialYape ?? 0),
+      montoInicialYape: Number(
+        item.monto_inicial_yape ??
+        item.montoInicialYape ??
+        apertura?.monto_inicial_yape ??
+        apertura?.montoInicialYape ??
+        0
+      ),
       totalVentas: total,
       montosContados: {
         efectivo,
@@ -369,11 +375,27 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
   const fetchCashClosures = async () => {
     try {
       setError(null);
-      const response = await fetch(`${API_BASE}/cierres`);
-      if (!response.ok) throw new Error('Error al obtener cierres de turno');
-      const data = await response.json();
+      const [closuresResponse, openingsResponse] = await Promise.all([
+        fetch(`${API_BASE}/cierres`),
+        fetch(`${API_BASE}/aperturas`),
+      ]);
+
+      if (!closuresResponse.ok) throw new Error('Error al obtener cierres de turno');
+
+      const data = await closuresResponse.json();
+      const openingsData = openingsResponse.ok ? await openingsResponse.json() : [];
+      const openingsById = new Map(
+        (Array.isArray(openingsData) ? openingsData : []).map((opening: any) => [
+          Number(opening.id ?? opening.id_apertura),
+          opening,
+        ])
+      );
+
       const closures = Array.isArray(data)
-        ? data.map(mapApiClosureToCierreCaja).sort((a, b) => b.id - a.id)
+        ? data.map((item: any) => {
+            const aperturaId = item.aperturaId ?? item.id_apertura ?? item.idApertura;
+            return mapApiClosureToCierreCaja(item, openingsById.get(Number(aperturaId)));
+          }).sort((a, b) => b.id - a.id)
         : [];
       setAllCierres(closures);
     } catch (err) {
@@ -1450,9 +1472,9 @@ export function CierreCajaModule({ currentUser }: CierreCajaModuleProps) {
               <CardTitle>Historial de Cierres de Caja</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              <div className="max-h-[430px] overflow-auto">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 z-10 bg-white">
                     <TableRow>
                       <TableHead>Nro Caja</TableHead>
                       <TableHead>Monto Inicial Efectivo</TableHead>

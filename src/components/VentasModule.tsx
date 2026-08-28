@@ -4,7 +4,6 @@ import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Search, Plus, ShoppingCart, Trash2, User, Download, Printer, FileText, Eye, Ban } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Label } from "./ui/label";
@@ -135,6 +134,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
   const [products, setProducts] = useState<any[]>([]);
   const [availableCoupons, setAvailableCoupons] = useState<any[]>([]);
   const [loadingSales, setLoadingSales] = useState(false);
+  const [loadingSaleDetails, setLoadingSaleDetails] = useState(false);
   const [showMayoristaDialog, setShowMayoristaDialog] = useState(false);
   const [mayoristaProduct, setMayoristaProduct] = useState<any | null>(null);
   const [mayoristaUnits, setMayoristaUnits] = useState<string>("");
@@ -195,9 +195,11 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
       const rows = Array.isArray(data) ? data : (data.detalle || data.rows || []);
       return rows.map((r: any) => ({
         idproducto: r.idproducto ?? r.id_producto ?? r.id ?? null,
-        name: r.nombre ?? r.name ?? '',
-        price: Number(r.precio ?? r.price ?? 0),
+        name: r.nombre ?? r.name ?? r.producto ?? '',
+        price: Number(r.precio_unitario ?? r.precio ?? r.price ?? 0),
         quantity: Number(r.cantidad ?? r.quantity ?? 0),
+        costo_compra: Number(r.costo_compra ?? r.costoCompra ?? r.costo ?? 0),
+        precio_unitario: Number(r.precio_unitario ?? r.precio ?? r.price ?? 0),
       }));
     } catch (error) {
       console.error('detalle-venta error:', error);
@@ -277,6 +279,48 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     setAvailableCoupons(dataService.getCoupons());
     setSales(dataService.getSales());
   }, []);
+
+  // Cargar los productos de las ventas de la caja abierta para mostrarlos en la lista.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadOpenBoxSaleDetails = async () => {
+      if (openBoxId === null) return;
+
+      const salesWithoutDetails = sales.filter(
+        sale => sale.id_apertura === openBoxId && (!sale.items || sale.items.length === 0)
+      );
+
+      if (salesWithoutDetails.length === 0) return;
+
+      setLoadingSaleDetails(true);
+      try {
+        const salesWithDetails = await Promise.all(
+          salesWithoutDetails.map(async sale => ({
+            id: sale.id,
+            items: await fetchSaleDetail(sale.id),
+          }))
+        );
+
+        if (cancelled) return;
+
+        setSales(previousSales => previousSales.map(sale => {
+          const saleDetails = salesWithDetails.find(detail => detail.id === sale.id);
+          return saleDetails?.items?.length
+            ? { ...sale, items: saleDetails.items }
+            : sale;
+        }));
+      } finally {
+        if (!cancelled) setLoadingSaleDetails(false);
+      }
+    };
+
+    loadOpenBoxSaleDetails();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [openBoxId, sales]);
 
   const filteredProducts = products.filter(p => 
     (p.name || '').toLowerCase().includes(searchProduct.toLowerCase()) ||
@@ -1599,69 +1643,108 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
           )}
         </CardHeader>
         <CardContent>
-          <div className="overflow-auto" style={{ maxHeight: '400px' }}>
-            <Table>
-              <TableHeader className="sticky top-0 bg-white">
-                <TableRow>
-                  <TableHead>ID Venta</TableHead>
-                  <TableHead>Nro Caja</TableHead>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Vendedor</TableHead>
-                  <TableHead>Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(() => {
-                  const displayedSales = sales.filter(s => s.id_apertura === openBoxId);
-                  if (displayedSales.length > 0) {
-                    return displayedSales.map((sale) => (
-                      <TableRow key={sale.id}>
-                        <TableCell>{sale.id}</TableCell>
-                        <TableCell className="font-bold" style={{ color: '#9AAD97' }}>{sale.id_apertura || '-'}</TableCell>
-                        <TableCell>{sale.date}</TableCell>
-                        <TableCell>{sale.customer}</TableCell>
-                        <TableCell>S/ {sale.total.toFixed(2)}</TableCell>
-                        <TableCell>{sale.user}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleOpenVoucherDialog(sale)}
-                              style={{ color: '#9AAD97', borderColor: '#9AAD97' }}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              Ver
-                            </Button>
-                            {currentUser.role && currentUser.role.toLowerCase() === 'administrador' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openAnnulDialog(sale)}
-                                style={{ color: '#ef4444', borderColor: '#ef4444' }}
-                              >
-                                <Ban className="h-4 w-4 mr-1" />
-                                Anular
-                              </Button>
+          {(() => {
+            const displayedSales = sales.filter(s => s.id_apertura === openBoxId);
+
+            if (displayedSales.length === 0) {
+              return (
+                <p className="text-center text-muted-foreground py-4">
+                  No hay ventas registradas en esta caja
+                </p>
+              );
+            }
+
+            return (
+              <div className="overflow-y-auto max-h-[400px] space-y-2">
+                {displayedSales.map((sale) => (
+                  <div key={sale.id} className="border rounded-lg overflow-hidden" style={{ borderColor: '#e5e7eb' }}>
+                    <div
+                      className="flex flex-wrap items-center justify-between gap-2 p-2 text-xs"
+                      style={{ backgroundColor: 'rgba(154, 173, 151, 0.08)' }}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold" style={{ color: '#9AAD97' }}>Venta #{sale.id}</span>
+                        <span className="text-muted-foreground">Caja {sale.id_apertura || '-'}</span>
+                        <span className="text-muted-foreground">{sale.date}</span>
+                        <span className="px-1.5 py-0.5 rounded border" style={{ borderColor: '#D5B888', color: '#D5B888' }}>
+                          {sale.paymentMethod}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold" style={{ color: '#9AAD97' }}>S/ {sale.total.toFixed(2)}</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenVoucherDialog(sale)}
+                          style={{ color: '#9AAD97', borderColor: '#9AAD97' }}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Ver
+                        </Button>
+                        {currentUser.role && currentUser.role.toLowerCase() === 'administrador' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openAnnulDialog(sale)}
+                            style={{ color: '#ef4444', borderColor: '#ef4444' }}
+                          >
+                            <Ban className="h-4 w-4 mr-1" />
+                            Anular
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="p-2">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-muted-foreground">
+                              <th className="text-left py-1">Prod.</th>
+                              <th className="text-center py-1 w-10">Cant.</th>
+                              <th className="text-right py-1 w-16">Costo</th>
+                              <th className="text-right py-1 w-16">P.U.</th>
+                              <th className="text-right py-1 w-16">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {loadingSaleDetails && (!sale.items || sale.items.length === 0) ? (
+                              <tr>
+                                <td colSpan={5} className="py-2 text-center text-muted-foreground">
+                                  Cargando productos...
+                                </td>
+                              </tr>
+                            ) : sale.items && sale.items.length > 0 ? (
+                              sale.items.map((item: any, idx: number) => {
+                                const quantity = Number(item.cantidad || item.quantity || 1);
+                                const unitPrice = Number(item.precio_unitario || item.precio || item.price || 0);
+                                return (
+                                  <tr key={item.id || item.idproducto || idx} className="border-b last:border-b-0 border-dashed" style={{ borderColor: '#f0f0f0' }}>
+                                    <td className="py-1 pr-1 truncate max-w-[120px] sm:max-w-[200px]">
+                                      {item.nombre || item.name || item.producto || 'Producto'}
+                                    </td>
+                                    <td className="py-1 text-center">{quantity}</td>
+                                    <td className="py-1 text-right">S/ {Number(item.costo_compra ?? item.costoCompra ?? item.costo ?? 0).toFixed(2)}</td>
+                                    <td className="py-1 text-right">S/ {unitPrice.toFixed(2)}</td>
+                                    <td className="py-1 text-right font-medium">S/ {(quantity * unitPrice).toFixed(2)}</td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan={5} className="py-2 text-center text-muted-foreground">
+                                  No hay productos en esta venta
+                                </td>
+                              </tr>
                             )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ));
-                  }
-                  return (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
-                        No hay ventas registradas en esta caja
-                      </TableCell>
-                    </TableRow>
-                  );
-                })()}
-              </TableBody>
-            </Table>
-          </div>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 

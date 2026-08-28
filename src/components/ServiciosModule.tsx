@@ -563,7 +563,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
       if (!response.ok) throw new Error('Error al agregar servicio');
 
       alert('Servicio agregado exitosamente');
-      setNewServiceData({ descripcion: "", precio: "", duracion: "" });
+      setNewServiceData({ descripcion: "", precio: "", duracion: "", estado: "ACT"});
       setNewServiceProducts([]);
       setShowAddServiceDialog(false);
       await loadAvailableServices();
@@ -1314,7 +1314,7 @@ export function ServiciosModule({ currentUser }: ServiciosModuleProps) {
                 <Label>Estado</Label>
                 <Select
                   value={editServiceData.estado}
-                  onValueChange={(value) => setEditServiceData({ ...editServiceData, estado: value })}
+                  onValueChange={(value: any) => setEditServiceData({ ...editServiceData, estado: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />

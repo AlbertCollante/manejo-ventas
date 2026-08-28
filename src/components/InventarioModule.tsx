@@ -248,7 +248,13 @@ export function InventarioModule() {
   }, []);
 
   const categories = ["all", "Analgésicos", "Antiinflamatorios", "Antibióticos", "Antihistamínicos", "Antiácidos", "Tópicos", "Servicios"];
-  const shelves = ["all", ...Array.from(new Set(products.map(p => p.shelf || p.estante).filter(Boolean))).sort((a, b) => a.localeCompare(b))];
+  const shelves = ["all", ...Array.from(
+    new Set(
+      products
+        .map(p => p.shelf ?? p.estante)
+        .filter((x): x is string => !!x)
+    )
+  ).sort((a, b) => a.localeCompare(b))];
   const brands = ["Farmex", "Bayer", "Labsur", "Roemmers", "Pfizer", "Novartis"];
 
   // Autocompletado por código
@@ -1001,7 +1007,7 @@ export function InventarioModule() {
       </Card>
 
       {/* Edit Product Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={(open) => {
+      <Dialog open={editDialogOpen} onOpenChange={(open: any) => {
         if (!open) { setEditDialogOpen(false); setEditingProduct(null); }
       }}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
