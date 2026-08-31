@@ -13,6 +13,53 @@ import { dataService } from "../services/dataService";
 
 const API_BASE = 'https://node-js-consalud-production.up.railway.app';
 
+const getOpenApertura = async (): Promise<{ apertura: any | null; error: Error | null }> => {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(`${API_BASE}/aperturas`);
+      if (!response.ok) {
+        throw new Error(`Error al consultar aperturas: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const aperturas = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.aperturas)
+          ? data.aperturas
+          : Array.isArray(data?.data)
+            ? data.data
+            : null;
+
+      if (!aperturas) {
+        throw new Error('La respuesta de aperturas no tiene un formato válido');
+      }
+
+      const apertura = aperturas.find(
+        (item: any) => String(item.estado ?? '').trim().toLowerCase() === 'abierto'
+      ) ?? null;
+
+      if (apertura) {
+        const id = Number(apertura.id ?? apertura.id_apertura);
+        if (!Number.isFinite(id) || id <= 0) {
+          throw new Error('La apertura abierta no tiene un ID válido');
+        }
+      }
+
+      return { apertura, error: null };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Error desconocido al consultar aperturas');
+
+      if (attempt === 0) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+      }
+    }
+  }
+
+  return { apertura: null, error: lastError };
+};
+
 const updateCashAccount = async (idApertura: number, paymentMethod: string, amount: number) => {
   const metodo = String(paymentMethod).toLowerCase();
   const esEfectivo = metodo === 'efectivo';
@@ -259,18 +306,14 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
     };
 
     const getOpenBox = async () => {
-      try {
-        const resp = await fetch(`${API_BASE}/aperturas`);
-        if (resp.ok) {
-          const data = await resp.json();
-          const openBox = data.find((a: any) => a.estado === 'abierto');
-          if (openBox) {
-            setOpenBoxId(openBox.id);
-          }
-        }
-      } catch (error) {
+      const { apertura, error } = await getOpenApertura();
+
+      if (error) {
         console.error('Error obteniendo caja abierta:', error);
+        return;
       }
+
+      setOpenBoxId(apertura ? Number(apertura.id ?? apertura.id_apertura) : null);
     };
 
     loadProducts();
@@ -915,27 +958,22 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
   const completeSale = async () => {
     if (cart.length === 0) return;
 
-    // Validar que la caja está abierta: consultar API /aperturas
-    let idApertura: number | null = null;
-    try {
-      const respA = await fetch(`${API_BASE}/aperturas`);
-      if (respA.ok) {
-        const aperturasData = await respA.json();
-        // Buscar la primera caja con estado "abierto"
-        const cajaAbierta = aperturasData.find((a: any) => a.estado === 'abierto');
-        if (cajaAbierta) {
-          idApertura = cajaAbierta.id;
-        }
-      }
-    } catch (err) {
-      console.error('Error consultando /aperturas:', err);
+    // Validar la caja en el servidor justo antes de registrar la venta.
+    const { apertura, error: aperturaError } = await getOpenApertura();
+
+    if (aperturaError) {
+      console.error('Error consultando /aperturas:', aperturaError);
+      alert('No se pudo verificar el estado de la caja. Revise su conexión e intente nuevamente.');
+      return;
     }
 
-    // Si no se encontró caja abierta en la API, mostrar error
-    if (!idApertura) {
+    if (!apertura) {
       alert("❌ Error: La caja no está abierta.\n\nDebe abrir la caja (Apertura de Caja) antes de realizar ventas.");
       return;
     }
+
+    const idApertura = Number(apertura.id ?? apertura.id_apertura);
+    setOpenBoxId(idApertura);
 
     if (!paymentMethod) {
       alert("Por favor seleccione un método de pago");
@@ -1701,7 +1739,6 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                             <tr className="text-muted-foreground">
                               <th className="text-left py-1">Prod.</th>
                               <th className="text-center py-1 w-10">Cant.</th>
-                              <th className="text-right py-1 w-16">Costo</th>
                               <th className="text-right py-1 w-16">P.U.</th>
                               <th className="text-right py-1 w-16">Total</th>
                             </tr>
@@ -1709,7 +1746,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                           <tbody>
                             {loadingSaleDetails && (!sale.items || sale.items.length === 0) ? (
                               <tr>
-                                <td colSpan={5} className="py-2 text-center text-muted-foreground">
+                                <td colSpan={4} className="py-2 text-center text-muted-foreground">
                                   Cargando productos...
                                 </td>
                               </tr>
@@ -1723,7 +1760,6 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                                       {item.nombre || item.name || item.producto || 'Producto'}
                                     </td>
                                     <td className="py-1 text-center">{quantity}</td>
-                                    <td className="py-1 text-right">S/ {Number(item.costo_compra ?? item.costoCompra ?? item.costo ?? 0).toFixed(2)}</td>
                                     <td className="py-1 text-right">S/ {unitPrice.toFixed(2)}</td>
                                     <td className="py-1 text-right font-medium">S/ {(quantity * unitPrice).toFixed(2)}</td>
                                   </tr>
@@ -1731,7 +1767,7 @@ export function VentasModule({ currentUser }: VentasModuleProps) {
                               })
                             ) : (
                               <tr>
-                                <td colSpan={5} className="py-2 text-center text-muted-foreground">
+                                <td colSpan={4} className="py-2 text-center text-muted-foreground">
                                   No hay productos en esta venta
                                 </td>
                               </tr>
