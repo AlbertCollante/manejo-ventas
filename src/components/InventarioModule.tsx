@@ -62,32 +62,8 @@ const DEFAULT_PRODUCTS = [
     id: 1, code: "MED001", name: "Paracetamol 500mg", category: "Analgésicos", brand: "Farmex",
     stock: 150, stockInicial: 150, minStock: 50, purchasePrice: 1.50, priceUnit: 2.50, priceBlister: 22.50, priceBox: 200.00,
     unitsPerBlister: 10, blistersPerBox: 10, expiry: "12/2026", location: "Estante A1", shelf: "A1"
-  },
-  { 
-    id: 2, code: "MED002", name: "Ibuprofeno 400mg", category: "Antiinflamatorios", brand: "Bayer",
-    stock: 8, stockInicial: 8, minStock: 30, purchasePrice: 2.50, priceUnit: 3.80, priceBlister: 35.00, priceBox: 320.00,
-    unitsPerBlister: 10, blistersPerBox: 10, expiry: "08/2025", location: "Estante A2", shelf: "A2"
-  },
-  { 
-    id: 3, code: "MED003", name: "Amoxicilina 500mg", category: "Antibióticos", brand: "Labsur",
-    stock: 12, stockInicial: 12, minStock: 40, purchasePrice: 10.00, priceUnit: 15.50, priceBlister: 140.00, priceBox: 1200.00,
-    unitsPerBlister: 10, blistersPerBox: 10, expiry: "03/2026", location: "Estante B1", shelf: "B1"
-  },
-  { 
-    id: 4, code: "MED004", name: "Loratadina 10mg", category: "Antihistamínicos", brand: "Roemmers",
-    stock: 50, stockInicial: 50, minStock: 25, purchasePrice: 6.50, priceUnit: 8.90, priceBlister: 80.10, priceBox: 720.90,
-    unitsPerBlister: 10, blistersPerBox: 10, expiry: "06/2026", location: "Estante B2", shelf: "B2"
-  },
-  { 
-    id: 5, code: "MED005", name: "Omeprazol 20mg", category: "Antiácidos", brand: "Pfizer",
-    stock: 95, stockInicial: 95, minStock: 35, purchasePrice: 9.00, priceUnit: 12.00, priceBlister: 108.00, priceBox: 972.00,
-    unitsPerBlister: 10, blistersPerBox: 10, expiry: "10/2026", location: "Estante C1", shelf: "C1"
-  },
-  { 
-    id: 6, code: "MED006", name: "Diclofenaco 50mg", category: "Antiinflamatorios", brand: "Novartis",
-    stock: 45, stockInicial: 45, minStock: 20, purchasePrice: 3.00, priceUnit: 4.50, priceBlister: 40.50, priceBox: 364.50,
-    unitsPerBlister: 10, blistersPerBox: 10, expiry: "05/2026", location: "Estante C2", shelf: "C2"
   }
+  
 ];
 
 interface Product {
@@ -198,15 +174,11 @@ export function InventarioModule() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
 
   // Cargar productos desde la API al montar el componente
   useEffect(() => {
     const loadProducts = async () => {
-      const oldKey = localStorage.getItem('products');
-      if (oldKey) {
-        localStorage.removeItem('products');
-      }
-
       try {
         const response = await fetch(`${API_BASE}/inventario-productos`);
         if (!response.ok) {
@@ -224,23 +196,9 @@ export function InventarioModule() {
         throw new Error('API de inventario devolvió datos inválidos');
       } catch (error) {
         console.error('Error cargando productos desde API:', error);
-        const savedProducts = localStorage.getItem('botica_products');
-        if (savedProducts) {
-          try {
-            const parsed = JSON.parse(savedProducts);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              const normalized = parsed.map(normalizeApiProduct);
-              setProducts(normalized);
-              return;
-            }
-          } catch (err) {
-            console.error('Error cargando productos desde localStorage:', err);
-          }
-        }
-
-        const normalized = DEFAULT_PRODUCTS.map(normalizeProduct);
-        setProducts(normalized);
-        localStorage.setItem('botica_products', JSON.stringify(normalized));
+        setProducts([]);
+      } finally {
+        setProductsLoading(false);
       }
     };
 
@@ -551,8 +509,8 @@ export function InventarioModule() {
   // Determinar si el usuario actual es vendedor (esto vendría del contexto/props en producción)
   const isVendedor = false; // Cambiar según el rol del usuario
 
-  // Mostrar componente de carga si no hay productos
-  if (products.length === 0) {
+  // Mostrar componente de carga mientras se consulta la API
+  if (productsLoading) {
     return (
       <div className="space-y-6">
         <div>
@@ -804,7 +762,7 @@ export function InventarioModule() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card style={{ borderTop: '4px solid #D5B888' }}>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
@@ -842,6 +800,20 @@ export function InventarioModule() {
               <div>
                 <p className="text-sm text-muted-foreground">Valor Inventario</p>
                 <p className="text-2xl" style={{ color: '#D5B888', fontWeight: 'bold' }}>S/ {products.reduce((sum, p) => sum + ((p.priceUnit || 0) * (p.stock || 0)), 0).toFixed(0)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card style={{ borderTop: '4px solid #9AAD97' }}>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-lg" style={{ backgroundColor: 'rgba(154, 173, 151, 0.1)' }}>
+                <Package className="h-6 w-6" style={{ color: '#9AAD97' }} />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Valor Neto de Inventario</p>
+                <p className="text-2xl" style={{ color: '#9AAD97', fontWeight: 'bold' }}>S/ {products.reduce((sum, p) => sum + ((p.purchasePrice || 0) * (p.stock || 0)), 0).toFixed(0)}</p>
               </div>
             </div>
           </CardContent>
